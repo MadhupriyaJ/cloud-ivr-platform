@@ -1,0 +1,108 @@
+import { DomainIntentsService } from '../domain-intents/domain-intents.service';
+import { DomainRulesService } from '../domain-rules/domain-rules.service';
+import { DomainService } from './domain.service';
+export declare class DomainController {
+    private readonly domainService;
+    private readonly domainIntentsService;
+    private readonly domainRulesService;
+    constructor(domainService: DomainService, domainIntentsService: DomainIntentsService, domainRulesService: DomainRulesService);
+    private toLegacyDomain;
+    private slugify;
+    private inferIndustry;
+    private buildSeedConfig;
+    private seedDomainData;
+    list(): Promise<{
+        items: {
+            domain_uuid: any;
+            domain_id: any;
+            display_name: any;
+            industry: any;
+            organization_name: any;
+            voice: any;
+            language: any;
+            welcome_message: any;
+            intents: string[];
+            rules: string[];
+            compliance: string[];
+            escalation_message: any;
+            active: any;
+            created_at: any;
+            updated_at: any;
+        }[];
+    }>;
+    getByCode(domainCode: string): Promise<{
+        domain_uuid: any;
+        domain_id: any;
+        display_name: any;
+        industry: any;
+        organization_name: any;
+        voice: any;
+        language: any;
+        welcome_message: any;
+        intents: string[];
+        rules: string[];
+        compliance: string[];
+        escalation_message: any;
+        active: any;
+        created_at: any;
+        updated_at: any;
+    }>;
+    generate(payload: {
+        domain_name: string;
+        organization_name?: string;
+    }): Promise<{
+        domain_uuid: any;
+        domain_id: any;
+        display_name: any;
+        industry: any;
+        organization_name: any;
+        voice: any;
+        language: any;
+        welcome_message: any;
+        intents: string[];
+        rules: string[];
+        compliance: string[];
+        escalation_message: any;
+        active: any;
+        created_at: any;
+        updated_at: any;
+    }>;
+    create(payload: any): Promise<{
+        domain_uuid: any;
+        domain_id: any;
+        display_name: any;
+        industry: any;
+        organization_name: any;
+        voice: any;
+        language: any;
+        welcome_message: any;
+        intents: string[];
+        rules: string[];
+        compliance: string[];
+        escalation_message: any;
+        active: any;
+        created_at: any;
+        updated_at: any;
+    }>;
+    update(domainCode: string, payload: any): Promise<{
+        domain_uuid: any;
+        domain_id: any;
+        display_name: any;
+        industry: any;
+        organization_name: any;
+        voice: any;
+        language: any;
+        welcome_message: any;
+        intents: string[];
+        rules: string[];
+        compliance: string[];
+        escalation_message: any;
+        active: any;
+        created_at: any;
+        updated_at: any;
+    }>;
+    remove(domainCode: string): Promise<{
+        deleted: boolean;
+        domain_id: string;
+    }>;
+}

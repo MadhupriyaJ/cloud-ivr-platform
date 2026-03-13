@@ -1,0 +1,82 @@
+[
+  {
+    "domain_id": "hospital",
+    "display_name": "Hospital Management",
+    "industry": "healthcare",
+    "organization_name": "meenakshi mission hospital",
+    "voice": "alloy",
+    "language": "English",
+    "welcome_message": "Welcome to meenakshi mission hospital. Please say appointments, lab reports, billing, or operator.",
+    "intents": [
+      "appointments",
+      "lab reports",
+      "billing",
+      "operator"
+    ],
+    "rules": [
+      "Keep responses under 12 words when possible.",
+      "Ask one question per turn.",
+      "Avoid long explanations."
+    ],
+    "compliance": [
+      "Never expose patient details before verification."
+    ],
+    "escalation_message": "Let me transfer you to a hospital operator.",
+    "active": true,
+    "created_at": "2026-03-02T00:00:00+00:00",
+    "updated_at": "2026-03-02T07:27:50.237509+00:00"
+  },
+  {
+    "domain_id": "bank",
+    "display_name": "bank IVR",
+    "industry": "banking",
+    "organization_name": "indian overseas bank",
+    "voice": "alloy",
+    "language": "English",
+    "welcome_message": "Welcome to indian overseas bank. How can I assist you today?",
+    "intents": [
+      "balance enquiry",
+      "card block",
+      "loan support",
+      "operator"
+    ],
+    "rules": [
+      "Confirm caller intent before giving sensitive actions.",
+      "Ask one short question at a time.",
+      "Keep replies concise for voice call flow."
+    ],
+    "compliance": [
+      "Always request verification before account-specific answers."
+    ],
+    "escalation_message": "Please hold while I connect you to banking support.",
+    "active": true,
+    "created_at": "2026-03-02T07:03:33.061791+00:00",
+    "updated_at": "2026-03-02T08:18:34.336972+00:00"
+  },
+  {
+    "domain_id": "insurance",
+    "display_name": "insurance IVR",
+    "industry": "general",
+    "organization_name": "HDFC life",
+    "voice": "alloy",
+    "language": "English",
+    "welcome_message": "Welcome to HDFC life. Please tell me your request.",
+    "intents": [
+      "sales",
+      "support",
+      "billing",
+      "operator"
+    ],
+    "rules": [
+      "Speak clearly and keep responses short.",
+      "Do not ask multiple questions in one turn."
+    ],
+    "compliance": [
+      "Avoid sharing confidential information without verification."
+    ],
+    "escalation_message": "I can transfer you to a live support agent.",
+    "active": true,
+    "created_at": "2026-03-02T09:14:00.633888+00:00",
+    "updated_at": "2026-03-02T09:14:20.914694+00:00"
+  }
+]
