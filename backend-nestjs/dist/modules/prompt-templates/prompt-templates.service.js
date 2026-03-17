@@ -28,9 +28,47 @@ let PromptTemplatesService = class PromptTemplatesService {
             order: { promptType: 'ASC', versionNo: 'DESC', createdAt: 'DESC' },
         });
     }
+    async listActiveByDomain(domainId) {
+        return this.repository.find({
+            where: { domainId, isActive: true },
+            order: { promptType: 'ASC', versionNo: 'DESC', createdAt: 'DESC' },
+        });
+    }
+    async findLatestActiveByType(domainId, promptType) {
+        return ((await this.repository.findOne({
+            where: { domainId, promptType, isActive: true },
+            order: { versionNo: 'DESC', createdAt: 'DESC' },
+        })) ?? null);
+    }
+    async upsertActiveTemplate(domainId, payload) {
+        const existing = await this.findLatestActiveByType(domainId, payload.promptType);
+        if (!existing) {
+            return this.create(domainId, payload);
+        }
+        Object.assign(existing, {
+            templateText: payload.templateText,
+            versionNo: payload.versionNo ?? existing.versionNo,
+            isActive: payload.isActive ?? true,
+        });
+        return this.repository.save(existing);
+    }
     async create(domainId, payload) {
         const entity = this.repository.create({ ...payload, domainId });
         return this.repository.save(entity);
+    }
+    async update(domainId, promptTemplateId, payload) {
+        const entity = await this.repository.findOne({ where: { domainId, promptTemplateId } });
+        if (!entity) {
+            throw new common_1.NotFoundException(`Prompt template '${promptTemplateId}' not found`);
+        }
+        Object.assign(entity, payload);
+        return this.repository.save(entity);
+    }
+    async remove(domainId, promptTemplateId) {
+        const result = await this.repository.delete({ domainId, promptTemplateId });
+        if (!result.affected) {
+            throw new common_1.NotFoundException(`Prompt template '${promptTemplateId}' not found`);
+        }
     }
 };
 exports.PromptTemplatesService = PromptTemplatesService;

@@ -9,7 +9,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RealtimeModule = void 0;
 const common_1 = require("@nestjs/common");
 const conversations_module_1 = require("../conversations/conversations.module");
+const domain_intents_module_1 = require("../domain-intents/domain-intents.module");
+const domain_rules_module_1 = require("../domain-rules/domain-rules.module");
 const domain_module_1 = require("../domains/domain.module");
+const prompt_templates_module_1 = require("../prompt-templates/prompt-templates.module");
 const realtime_gateway_1 = require("./realtime.gateway");
 const realtime_service_1 = require("./realtime.service");
 let RealtimeModule = class RealtimeModule {
@@ -17,7 +20,13 @@ let RealtimeModule = class RealtimeModule {
 exports.RealtimeModule = RealtimeModule;
 exports.RealtimeModule = RealtimeModule = __decorate([
     (0, common_1.Module)({
-        imports: [conversations_module_1.ConversationsModule, domain_module_1.DomainModule],
+        imports: [
+            conversations_module_1.ConversationsModule,
+            domain_module_1.DomainModule,
+            domain_intents_module_1.DomainIntentsModule,
+            domain_rules_module_1.DomainRulesModule,
+            prompt_templates_module_1.PromptTemplatesModule,
+        ],
         providers: [realtime_gateway_1.RealtimeGateway, realtime_service_1.RealtimeService],
     })
 ], RealtimeModule);

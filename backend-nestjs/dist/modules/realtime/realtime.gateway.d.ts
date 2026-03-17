@@ -24,6 +24,11 @@ export declare class RealtimeGateway implements OnGatewayConnection, OnGatewayDi
         voice: string;
         organizationName: string;
         fallbackMessage: string;
+        escalationMessage: string;
+        intents: string[];
+        rules: string[];
+        compliance: string[];
+        instructions: string;
     }>;
     pushAudio(payload: {
         audioBase64: string;

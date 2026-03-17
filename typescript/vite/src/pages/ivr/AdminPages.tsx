@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { KeenIcon } from '@/components';
+import { Container, KeenIcon } from '@/components';
+import ApexChart from 'react-apexcharts';
+import type { ApexOptions } from 'apexcharts';
+import { toAbsoluteUrl } from '@/utils/Assets';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   createAgent,
   createDomainIntent,
@@ -8,6 +12,10 @@ import {
   createEscalation,
   createPromptTemplate,
   createToolDefinition,
+  deleteDomainIntent,
+  deleteDomainRule,
+  deletePromptTemplate,
+  deleteToolDefinition,
   fetchAgents,
   fetchConversationMessages,
   fetchConversations,
@@ -17,7 +25,11 @@ import {
   fetchDomainRules,
   fetchEscalations,
   fetchPromptTemplates,
-  fetchToolDefinitions
+  fetchToolDefinitions,
+  updateDomainIntent,
+  updateDomainRule,
+  updatePromptTemplate,
+  updateToolDefinition
 } from './api';
 import {
   EmptyRow,
@@ -42,6 +54,19 @@ import type {
 } from './types';
 
 type Toast = { kind: 'success' | 'danger'; text: string } | null;
+
+function ActionButtons(props: { onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="flex justify-end gap-2">
+      <button className="btn btn-sm btn-light" onClick={props.onEdit}>
+        Edit
+      </button>
+      <button className="btn btn-sm btn-light" onClick={props.onDelete}>
+        Delete
+      </button>
+    </div>
+  );
+}
 
 function DomainSelect(props: {
   domains: DomainConfig[];
@@ -68,6 +93,35 @@ function DomainSelect(props: {
 
 function resolveDomainUuid(domain?: DomainConfig | null): string {
   return domain?.domain_uuid || '';
+}
+
+function isRawAudioChunkMessage(message: ConversationMessage): boolean {
+  const type = message.messageType.trim().toLowerCase();
+  const text = message.messageText.trim().toLowerCase();
+  return type === 'audio_chunk' || /^\[audio_chunk:\d+\]$/.test(text);
+}
+
+function getReadableSpeakerLabel(speakerType: string): string {
+  const normalized = speakerType.trim().toLowerCase();
+  if (normalized === 'assistant' || normalized === 'agent') return 'IVR';
+  if (normalized === 'customer' || normalized === 'user') return 'Customer';
+  return speakerType;
+}
+
+function getReadableMessageType(message: ConversationMessage): string {
+  if (isRawAudioChunkMessage(message)) return 'Audio chunk';
+  const normalized = message.messageType.trim().toLowerCase();
+  if (normalized === 'input_text') return 'Customer message';
+  if (normalized === 'output_text') return 'IVR response';
+  return message.messageType.replace(/_/g, ' ');
+}
+
+function getReadableTranscriptText(message: ConversationMessage): string {
+  if (isRawAudioChunkMessage(message)) {
+    return 'Audio captured for this turn. Transcript text is not available yet.';
+  }
+  const text = message.messageText.trim();
+  return text || 'No transcript text available.';
 }
 
 const OverviewPage = () => {
@@ -107,105 +161,360 @@ const OverviewPage = () => {
 
   const liveConversations = conversations.filter((item) => item.sessionStatus === 'started').length;
   const openEscalations = escalations.filter((item) => !item.closedAt).length;
+  const closedEscalations = escalations.filter((item) => item.closedAt).length;
   const activeDomains = domains.filter((item) => item.active).length;
   const availableAgents = agents.filter((item) => item.isActive).length;
+  const escalatedSessions = conversations.filter((item) => item.escalatedToAgent).length;
+  const chartMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthlyCalls = useMemo(() => {
+    const counts = new Array(12).fill(0);
+    conversations.forEach((item) => {
+      const date = new Date(item.startedAt);
+      if (!Number.isNaN(date.getTime())) counts[date.getMonth()] += 1;
+    });
+    return counts;
+  }, [conversations]);
+  const chartOptions: ApexOptions = useMemo(
+    () => ({
+      chart: { type: 'area', height: 250, toolbar: { show: false } },
+      dataLabels: { enabled: false },
+      legend: { show: false },
+      stroke: { curve: 'smooth', width: 3, colors: ['var(--tw-primary)'] },
+      fill: { gradient: { opacityFrom: 0.22, opacityTo: 0.02 } },
+      xaxis: {
+        categories: chartMonths,
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+        labels: { style: { colors: 'var(--tw-gray-500)', fontSize: '12px' } }
+      },
+      yaxis: {
+        labels: { style: { colors: 'var(--tw-gray-500)', fontSize: '12px' } }
+      },
+      grid: {
+        borderColor: 'var(--tw-gray-200)',
+        strokeDashArray: 5,
+        yaxis: { lines: { show: true } },
+        xaxis: { lines: { show: false } }
+      },
+      tooltip: { enabled: true }
+    }),
+    []
+  );
+  const topCards = [
+    { icon: 'abstract-26', value: `${activeDomains}`, desc: 'Active domains', color: 'text-primary' },
+    { icon: 'phone', value: `${liveConversations}`, desc: 'Live calls', color: 'text-success' },
+    { icon: 'delivery-24', value: `${openEscalations}`, desc: 'Open escalations', color: 'text-warning' },
+    { icon: 'people', value: `${availableAgents}`, desc: 'Ready agents', color: 'text-info' }
+  ];
+  const summaryRows = [
+    { icon: 'phone', text: 'Voice sessions', total: conversations.length, stats: liveConversations, increase: true },
+    { icon: 'security-user', text: 'Escalation cases', total: escalatedSessions, stats: openEscalations, increase: false },
+    { icon: 'user-tick', text: 'Resolved handoffs', total: closedEscalations, stats: availableAgents, increase: true }
+  ];
 
   return (
-    <div className="ivr-admin-shell">
-      <IvrPageHeader
-        title="IVR Overview"
-        description="Monitor the current tenant setup, conversation volume, and escalation pressure."
-        actions={
-          <>
-            <button className="btn btn-light" onClick={() => void load()} disabled={busy}>
-              Reload
-            </button>
-            <button className="btn btn-primary" onClick={() => navigate('/domains/new')}>
-              <KeenIcon icon="plus" className="me-2" />
-              New Domain
-            </button>
-          </>
-        }
-      />
+    <Container className="container-fluid">
+      <style>
+        {`
+          .ivr-overview-stat-bg {
+            background-image: url('${toAbsoluteUrl('/media/images/2600x1600/bg-3.png')}');
+          }
+          .dark .ivr-overview-stat-bg {
+            background-image: url('${toAbsoluteUrl('/media/images/2600x1600/bg-3-dark.png')}');
+          }
+          .ivr-overview-callout-bg {
+            background-image: url('${toAbsoluteUrl('/media/images/2600x1600/2.png')}');
+          }
+          .dark .ivr-overview-callout-bg {
+            background-image: url('${toAbsoluteUrl('/media/images/2600x1600/2-dark.png')}');
+          }
+        `}
+      </style>
+      <div className="grid gap-5 lg:gap-7.5">
+        <IvrPageHeader
+          title="Dashboard"
+          description="Central hub for IVR operations, live calls, and domain activity."
+          actions={
+            <>
+              <button className="btn btn-sm btn-light" onClick={() => void load()} disabled={busy}>
+                Reload
+              </button>
+              <button className="btn btn-sm btn-primary" onClick={() => navigate('/domains/new')}>
+                <KeenIcon icon="plus" className="me-2" />
+                New Domain
+              </button>
+            </>
+          }
+        />
 
-      <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-5">
-        <IvrStatCard label="Active Domains" value={activeDomains} meta={`${domains.length} total`} tone="teal" />
-        <IvrStatCard label="Live Calls" value={liveConversations} meta={`${conversations.length} recent sessions`} tone="blue" />
-        <IvrStatCard label="Open Escalations" value={openEscalations} meta={`${escalations.length} total escalations`} tone="amber" />
-        <IvrStatCard label="Available Agents" value={availableAgents} meta={`${agents.length} configured`} tone="rose" />
-      </div>
-
-      <div className="grid xl:grid-cols-2 gap-5">
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Recent Domains</h3>
+        <div className="grid items-stretch gap-y-5 lg:grid-cols-3 lg:gap-7.5">
+          <div className="lg:col-span-1">
+            <div className="grid h-full grid-cols-2 gap-5 lg:gap-7.5">
+              {topCards.map((item) => (
+                <div
+                  key={item.desc}
+                  className="card ivr-overview-stat-bg h-full flex-col justify-between gap-6 border border-gray-200 bg-cover bg-[right_top_-1.7rem] bg-no-repeat shadow-none rtl:bg-[left_top_-1.7rem] dark:border-coal-100 "
+                >
+                  <div className={`mt-4 ms-5 flex size-11 items-center justify-center rounded-lg bg-light  ${item.color}`}>
+                    <KeenIcon icon={item.icon} className="text-xl" />
+                  </div>
+                  <div className="flex flex-col gap-1 px-5 pb-4">
+                    <span className="text-3xl font-semibold text-gray-900 dark:text-white">{item.value}</span>
+                    <span className="text-2sm font-normal text-gray-700 dark:text-gray-500">{item.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="card-table scrollable-x-auto pb-3">
-            <table className="table table-auto table-border align-middle text-sm">
-              <thead>
-                <tr>
-                  <th>Domain</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                  <th className="text-end">Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {domains.length === 0 && <EmptyRow colSpan={4} text={busy ? 'Loading domains...' : 'No domains found.'} />}
-                {domains.slice(0, 6).map((domain) => (
-                  <tr key={domain.domain_id}>
-                    <td>
-                      <div className="font-semibold text-gray-900">{domain.display_name}</div>
-                      <div className="text-xs text-gray-600">{domain.domain_id}</div>
-                    </td>
-                    <td>{domain.active ? 'Active' : 'Draft'}</td>
-                    <td>{formatDateTime(domain.updated_at)}</td>
-                    <td className="text-end">
-                      <button className="btn btn-sm btn-light" onClick={() => navigate(`/domains/${domain.domain_id}`)}>
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="lg:col-span-2">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+              <div className="card-body ivr-overview-callout-bg bg-[length:80%] bg-no-repeat p-10 [background-position:175%_25%] rtl:[background-position:-70%_25%]">
+                <div className="flex flex-col justify-center gap-4">
+                  <div className="flex -space-x-2">
+                    {['AI', 'QA', 'Ops', `${availableAgents}`].map((item, index) => (
+                      <div
+                        key={`${item}-${index}`}
+                        className={`flex size-10 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-white dark:ring-coal-100 ${index === 3 ? 'bg-success' : 'bg-primary'}`}
+                      >
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                  <h2 className="text-1.5xl font-semibold text-gray-900 dark:text-white">
+                    Run live voice journeys and monitor <br /> the{' '}
+                    <a className="link" href="#">
+                      IVR operations workspace
+                    </a>
+                  </h2>
+                  <p className="text-sm font-normal leading-5.5 text-gray-700 dark:text-gray-400">
+                    Track domain coverage, live call load, and escalation movement from one
+                    dashboard. Use the workspace to update prompts, rules, and agents without
+                    leaving the IVR module.
+                  </p>
+                </div>
+              </div>
+              <div className="card-footer justify-center border-t border-gray-200 dark:border-coal-100">
+                <button className="btn btn-link" onClick={() => navigate('/ivr/conversations')}>
+                  Open Live Console
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid items-stretch gap-5 lg:grid-cols-3 lg:gap-7.5">
+          <div className="lg:col-span-1">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+              <div className="card-header border-b border-gray-200 dark:border-coal-100">
+                <h3 className="card-title">Highlights</h3>
+                <button className="btn btn-sm btn-icon btn-light btn-clear">
+                  <KeenIcon icon="dots-vertical" />
+                </button>
+              </div>
+              <div className="card-body flex flex-col gap-4 p-5 lg:p-7.5 lg:pt-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-normal text-gray-700 dark:text-gray-500">
+                    All time call volume
+                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-3xl font-semibold text-gray-900 dark:text-white">
+                      {conversations.length}
+                    </span>
+                    <span className="badge badge-outline badge-success badge-sm">
+                      {availableAgents} active agents
+                    </span>
+                  </div>
+                </div>
+                <div className="mb-1.5 flex items-center gap-1">
+                  <div className="h-2 w-full max-w-[55%] rounded-sm bg-success"></div>
+                  <div className="h-2 w-full max-w-[28%] rounded-sm bg-primary"></div>
+                  <div className="h-2 w-full max-w-[17%] rounded-sm bg-warning"></div>
+                </div>
+                <div className="mb-1 flex items-center flex-wrap gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="badge badge-dot size-2 badge-success"></span>
+                    <span className="text-sm text-gray-800 dark:text-gray-300">Completed</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="badge badge-dot size-2 badge-primary"></span>
+                    <span className="text-sm text-gray-800 dark:text-gray-300">Live</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="badge badge-dot size-2 badge-warning"></span>
+                    <span className="text-sm text-gray-800 dark:text-gray-300">Escalated</span>
+                  </div>
+                </div>
+                <div className="border-b border-gray-300 dark:border-coal-100"></div>
+                <div className="grid gap-3">
+                  {summaryRows.map((row) => (
+                    <div key={row.text} className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <KeenIcon icon={row.icon} className="text-base text-gray-500" />
+                        <span className="text-sm font-normal text-gray-900 dark:text-white">
+                          {row.text}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6 text-sm font-medium text-gray-800 dark:text-gray-300">
+                        <span>{row.total}</span>
+                        <span>
+                          <KeenIcon
+                            icon={row.increase ? 'arrow-up' : 'arrow-down'}
+                            className={row.increase ? 'text-success' : 'text-danger'}
+                          />{' '}
+                          {row.stats}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+              <div className="card-header">
+                <h3 className="card-title">Conversation Trend</h3>
+                <div className="flex items-center gap-5">
+                  <label className="switch switch-sm">
+                    <input name="calls" type="checkbox" value="1" className="order-2" readOnly />
+                    <span className="switch-label order-1">Live sessions only</span>
+                  </label>
+                  <Select defaultValue="12">
+                    <SelectTrigger className="w-28" size="sm">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent className="w-32">
+                      <SelectItem value="1">1 month</SelectItem>
+                      <SelectItem value="3">3 months</SelectItem>
+                      <SelectItem value="6">6 months</SelectItem>
+                      <SelectItem value="12">12 months</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="card-body flex grow flex-col items-stretch justify-end px-3 py-1">
+                <ApexChart
+                  options={chartOptions}
+                  series={[{ name: 'Calls', data: monthlyCalls }]}
+                  type="area"
+                  height={250}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Recent Escalations</h3>
+        <div className="grid items-stretch gap-5 lg:grid-cols-3 lg:gap-7.5">
+          <div className="lg:col-span-1">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+              <div className="card-body p-5 lg:p-7.5 lg:pt-6">
+                <div className="mb-7.5 flex items-center justify-between gap-5 flex-wrap">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-1.5xl font-semibold text-gray-900 dark:text-white">
+                      Live Session Window
+                    </span>
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-300">
+                      Now monitoring
+                    </span>
+                  </div>
+                  <div className="flex size-9 items-center justify-center rounded-full bg-primary-light text-primary">
+                    <KeenIcon icon="phone" className="text-lg" />
+                  </div>
+                </div>
+                <p className="mb-8 text-sm font-normal leading-5.5 text-gray-800 dark:text-gray-400">
+                  Use this panel to jump into active calls, review domain readiness, and keep the
+                  escalation queue under control during live traffic.
+                </p>
+                <div className="flex gap-10 rounded-lg bg-gray-100 p-5 ">
+                  <div className="flex flex-col gap-5">
+                    <div className="flex items-center gap-1.5 text-sm font-normal text-gray-800 dark:text-gray-200">
+                      <KeenIcon icon="security-user" className="text-base text-gray-500" />
+                      Queue
+                    </div>
+                    <div className="pt-1.5 text-sm font-medium text-gray-800 dark:text-gray-100">
+                      {openEscalations} open
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-5">
+                    <div className="flex items-center gap-1.5 text-sm font-normal text-gray-800 dark:text-gray-200">
+                      <KeenIcon icon="users" className="text-base text-gray-500" />
+                      Domains
+                    </div>
+                    <div className="pt-1.5 text-sm font-medium text-gray-800 dark:text-gray-100">
+                      {activeDomains} active
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="card-footer justify-center border-t border-gray-200 dark:border-coal-100">
+                <button className="btn btn-link" onClick={() => navigate('/ivr/conversations')}>
+                  Open Conversations
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="card-table scrollable-x-auto pb-3">
-            <table className="table table-auto table-border align-middle text-sm">
-              <thead>
-                <tr>
-                  <th>Conversation</th>
-                  <th>Reason</th>
-                  <th>Status</th>
-                  <th>When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {escalations.length === 0 && (
-                  <EmptyRow colSpan={4} text={busy ? 'Loading escalations...' : 'No escalations found.'} />
-                )}
-                {escalations.slice(0, 6).map((item) => (
-                  <tr key={item.escalationId}>
-                    <td className="font-mono text-xs">{item.conversationId.slice(0, 8)}</td>
-                    <td>{item.escalationReason}</td>
-                    <td>{item.closedAt ? 'Closed' : item.acceptedAt ? 'Accepted' : 'Open'}</td>
-                    <td>{formatDateTime(item.escalatedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="lg:col-span-2">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+              <div className="card-header flex-wrap gap-2 border-b border-gray-200 px-5 dark:border-coal-100">
+                <h3 className="card-title font-medium text-sm">Domains</h3>
+                <div className="ms-auto flex flex-wrap gap-2 lg:gap-5">
+                  <label className="input input-sm">
+                    <KeenIcon icon="magnifier" />
+                    <input type="text" placeholder="Search Domains..." readOnly />
+                  </label>
+                </div>
+              </div>
+              <div className="card-table scrollable-x-auto">
+                <table className="table table-auto align-middle text-sm">
+                  <thead>
+                    <tr>
+                      <th>Domain</th>
+                      <th>Status</th>
+                      <th>Industry</th>
+                      <th>Updated</th>
+                      <th className="text-end">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {domains.length === 0 && (
+                      <EmptyRow colSpan={5} text={busy ? 'Loading domains...' : 'No domains found.'} />
+                    )}
+                    {domains.slice(0, 6).map((item) => (
+                      <tr key={item.domain_id}>
+                        <td>
+                          <div className="font-semibold text-gray-900 dark:text-gray-100">
+                            {item.display_name}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {item.organization_name}
+                          </div>
+                        </td>
+                        <td>{item.active ? 'Active' : 'Draft'}</td>
+                        <td>{item.industry || '-'}</td>
+                        <td>{formatDateTime(item.updated_at)}</td>
+                        <td className="text-end">
+                          <button
+                            className="btn btn-sm btn-light"
+                            onClick={() => navigate(`/domains/${item.domain_id}`)}
+                          >
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <IvrToast toast={toast} />
-    </div>
+        <IvrToast toast={toast} />
+      </div>
+    </Container>
   );
 };
 
@@ -254,7 +563,7 @@ const DomainDetailPage = () => {
   }, [load]);
 
   return (
-    <div className="ivr-admin-shell">
+    <div className="container-fluid grid gap-5">
       <IvrPageHeader
         title={domain ? domain.display_name : 'Domain Workspace'}
         description={domain ? `${domain.organization_name} | ${domain.domain_id}` : 'Loading domain details'}
@@ -398,6 +707,7 @@ const IntentsRulesPage = () => {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [intentForm, setIntentForm] = useState({
+    intentCode: '',
     intentLabel: '',
     description: '',
     priority: 100,
@@ -409,6 +719,8 @@ const IntentsRulesPage = () => {
     priority: 100,
     isActive: true
   });
+  const [editingIntentId, setEditingIntentId] = useState<string | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
 
   useToast(toast, () => setToast(null));
 
@@ -475,51 +787,103 @@ const IntentsRulesPage = () => {
     void loadDomainsAndData();
   }, [loadDomainsAndData]);
 
-  const onCreateIntent = useCallback(async () => {
+  const onSaveIntent = useCallback(async () => {
     const domainUuid = resolveDomainUuid(selectedDomain);
     if (!domainUuid || !intentForm.intentLabel.trim()) return;
     setBusy(true);
     try {
-      await createDomainIntent(domainUuid, {
-        intentCode: slugify(intentForm.intentLabel),
+      const payload = {
+        intentCode: intentForm.intentCode.trim() || slugify(intentForm.intentLabel),
         intentLabel: intentForm.intentLabel,
         description: intentForm.description || undefined,
         priority: Number(intentForm.priority) || 100,
         isActive: intentForm.isActive
-      });
-      setIntentForm({ intentLabel: '', description: '', priority: 100, isActive: true });
-      setToast({ kind: 'success', text: 'Intent created.' });
+      };
+      if (editingIntentId) {
+        await updateDomainIntent(domainUuid, editingIntentId, payload);
+        setToast({ kind: 'success', text: 'Intent updated.' });
+      } else {
+        await createDomainIntent(domainUuid, payload);
+        setToast({ kind: 'success', text: 'Intent created.' });
+      }
+      setEditingIntentId(null);
+      setIntentForm({ intentCode: '', intentLabel: '', description: '', priority: 100, isActive: true });
       await reloadSelected(selectedDomainId);
     } catch (error) {
-      setToast({ kind: 'danger', text: `Failed to create intent: ${getErrorText(error)}` });
+      setToast({ kind: 'danger', text: `Failed to save intent: ${getErrorText(error)}` });
     } finally {
       setBusy(false);
     }
-  }, [intentForm, reloadSelected, selectedDomain, selectedDomainId]);
+  }, [editingIntentId, intentForm, reloadSelected, selectedDomain, selectedDomainId]);
 
-  const onCreateRule = useCallback(async () => {
+  const onSaveRule = useCallback(async () => {
     const domainUuid = resolveDomainUuid(selectedDomain);
     if (!domainUuid || !ruleForm.ruleText.trim()) return;
     setBusy(true);
     try {
-      await createDomainRule(domainUuid, {
+      const payload = {
         ruleType: ruleForm.ruleType,
         ruleText: ruleForm.ruleText,
         priority: Number(ruleForm.priority) || 100,
         isActive: ruleForm.isActive
-      });
+      };
+      if (editingRuleId) {
+        await updateDomainRule(domainUuid, editingRuleId, payload);
+        setToast({ kind: 'success', text: 'Rule updated.' });
+      } else {
+        await createDomainRule(domainUuid, payload);
+        setToast({ kind: 'success', text: 'Rule created.' });
+      }
+      setEditingRuleId(null);
       setRuleForm({ ruleType: 'rule', ruleText: '', priority: 100, isActive: true });
-      setToast({ kind: 'success', text: 'Rule created.' });
       await reloadSelected(selectedDomainId);
     } catch (error) {
-      setToast({ kind: 'danger', text: `Failed to create rule: ${getErrorText(error)}` });
+      setToast({ kind: 'danger', text: `Failed to save rule: ${getErrorText(error)}` });
     } finally {
       setBusy(false);
     }
-  }, [reloadSelected, ruleForm, selectedDomain, selectedDomainId]);
+  }, [editingRuleId, reloadSelected, ruleForm, selectedDomain, selectedDomainId]);
+
+  const onDeleteIntent = useCallback(async (intentId: string) => {
+    const domainUuid = resolveDomainUuid(selectedDomain);
+    if (!domainUuid || !window.confirm('Delete this intent?')) return;
+    setBusy(true);
+    try {
+      await deleteDomainIntent(domainUuid, intentId);
+      if (editingIntentId === intentId) {
+        setEditingIntentId(null);
+        setIntentForm({ intentCode: '', intentLabel: '', description: '', priority: 100, isActive: true });
+      }
+      setToast({ kind: 'success', text: 'Intent deleted.' });
+      await reloadSelected(selectedDomainId);
+    } catch (error) {
+      setToast({ kind: 'danger', text: `Failed to delete intent: ${getErrorText(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  }, [editingIntentId, reloadSelected, selectedDomain, selectedDomainId]);
+
+  const onDeleteRule = useCallback(async (ruleId: string) => {
+    const domainUuid = resolveDomainUuid(selectedDomain);
+    if (!domainUuid || !window.confirm('Delete this rule?')) return;
+    setBusy(true);
+    try {
+      await deleteDomainRule(domainUuid, ruleId);
+      if (editingRuleId === ruleId) {
+        setEditingRuleId(null);
+        setRuleForm({ ruleType: 'rule', ruleText: '', priority: 100, isActive: true });
+      }
+      setToast({ kind: 'success', text: 'Rule deleted.' });
+      await reloadSelected(selectedDomainId);
+    } catch (error) {
+      setToast({ kind: 'danger', text: `Failed to delete rule: ${getErrorText(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  }, [editingRuleId, reloadSelected, selectedDomain, selectedDomainId]);
 
   return (
-    <div className="ivr-admin-shell">
+    <div className="container-fluid grid gap-5">
       <IvrPageHeader
         title="Intents & Rules"
         description="Manage routing intents and IVR policy rules per domain."
@@ -533,15 +897,23 @@ const IntentsRulesPage = () => {
           </div>
           <div className="card-body grid gap-3">
             <input className="input" value={intentForm.intentLabel} placeholder="Intent label" onChange={(event) => setIntentForm((prev) => ({ ...prev, intentLabel: event.target.value }))} />
+            <input className="input" value={intentForm.intentCode} placeholder="Intent code" onChange={(event) => setIntentForm((prev) => ({ ...prev, intentCode: event.target.value }))} />
             <input className="input" value={intentForm.description} placeholder="Description" onChange={(event) => setIntentForm((prev) => ({ ...prev, description: event.target.value }))} />
             <input className="input" type="number" value={intentForm.priority} onChange={(event) => setIntentForm((prev) => ({ ...prev, priority: Number(event.target.value) }))} />
             <label className="checkbox-group">
               <input type="checkbox" checked={intentForm.isActive} onChange={(event) => setIntentForm((prev) => ({ ...prev, isActive: event.target.checked }))} />
               <span className="checkbox-label">Active intent</span>
             </label>
-            <button className="btn btn-primary" onClick={() => void onCreateIntent()} disabled={busy || !selectedDomainId}>
-              Create Intent
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn btn-primary" onClick={() => void onSaveIntent()} disabled={busy || !selectedDomainId}>
+                {editingIntentId ? 'Update Intent' : 'Create Intent'}
+              </button>
+              {editingIntentId && (
+                <button className="btn btn-light" onClick={() => { setEditingIntentId(null); setIntentForm({ intentCode: '', intentLabel: '', description: '', priority: 100, isActive: true }); }}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -560,9 +932,16 @@ const IntentsRulesPage = () => {
               <input type="checkbox" checked={ruleForm.isActive} onChange={(event) => setRuleForm((prev) => ({ ...prev, isActive: event.target.checked }))} />
               <span className="checkbox-label">Active rule</span>
             </label>
-            <button className="btn btn-primary" onClick={() => void onCreateRule()} disabled={busy || !selectedDomainId}>
-              Create Rule
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn btn-primary" onClick={() => void onSaveRule()} disabled={busy || !selectedDomainId}>
+                {editingRuleId ? 'Update Rule' : 'Create Rule'}
+              </button>
+              {editingRuleId && (
+                <button className="btn btn-light" onClick={() => { setEditingRuleId(null); setRuleForm({ ruleType: 'rule', ruleText: '', priority: 100, isActive: true }); }}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -580,10 +959,11 @@ const IntentsRulesPage = () => {
                   <th>Priority</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {intents.length === 0 && <EmptyRow colSpan={4} text={busy ? 'Loading intents...' : 'No intents found.'} />}
+                {intents.length === 0 && <EmptyRow colSpan={5} text={busy ? 'Loading intents...' : 'No intents found.'} />}
                 {intents.map((item) => (
                   <tr key={item.intentId}>
                     <td>
@@ -593,6 +973,21 @@ const IntentsRulesPage = () => {
                     <td>{item.priority}</td>
                     <td>{item.isActive ? 'Active' : 'Inactive'}</td>
                     <td>{formatDateTime(item.createdAt)}</td>
+                    <td className="text-end">
+                      <ActionButtons
+                        onEdit={() => {
+                          setEditingIntentId(item.intentId);
+                          setIntentForm({
+                            intentCode: item.intentCode,
+                            intentLabel: item.intentLabel,
+                            description: item.description || '',
+                            priority: item.priority,
+                            isActive: item.isActive
+                          });
+                        }}
+                        onDelete={() => void onDeleteIntent(item.intentId)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -612,16 +1007,31 @@ const IntentsRulesPage = () => {
                   <th>Rule</th>
                   <th>Priority</th>
                   <th>Status</th>
+                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {rules.length === 0 && <EmptyRow colSpan={4} text={busy ? 'Loading rules...' : 'No rules found.'} />}
+                {rules.length === 0 && <EmptyRow colSpan={5} text={busy ? 'Loading rules...' : 'No rules found.'} />}
                 {rules.map((item) => (
                   <tr key={item.ruleId}>
                     <td>{item.ruleType}</td>
                     <td>{item.ruleText}</td>
                     <td>{item.priority}</td>
                     <td>{item.isActive ? 'Active' : 'Inactive'}</td>
+                    <td className="text-end">
+                      <ActionButtons
+                        onEdit={() => {
+                          setEditingRuleId(item.ruleId);
+                          setRuleForm({
+                            ruleType: item.ruleType,
+                            ruleText: item.ruleText,
+                            priority: item.priority,
+                            isActive: item.isActive
+                          });
+                        }}
+                        onDelete={() => void onDeleteRule(item.ruleId)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -687,11 +1097,26 @@ const ConversationsPage = () => {
     return lookup;
   }, [domains]);
 
+  const selectedConversation = useMemo(
+    () => conversations.find((item) => item.conversationId === selectedConversationId) || null,
+    [conversations, selectedConversationId]
+  );
+
+  const transcriptMessages = useMemo(
+    () => messages.filter((item) => !isRawAudioChunkMessage(item)),
+    [messages]
+  );
+
+  const hiddenAudioChunkCount = useMemo(
+    () => messages.filter((item) => isRawAudioChunkMessage(item)).length,
+    [messages]
+  );
+
   return (
-    <div className="ivr-admin-shell">
+    <div className="container-fluid grid gap-5">
       <IvrPageHeader
         title="Conversations"
-        description="Browse recent sessions and inspect transcript messages."
+        description="Browse recent sessions and inspect readable customer and IVR transcript messages."
         actions={
           <button className="btn btn-light" onClick={() => void load()} disabled={busy}>
             Reload
@@ -700,8 +1125,8 @@ const ConversationsPage = () => {
       />
 
       <div className="grid xl:grid-cols-[420px_1fr] gap-5">
-        <div className="card">
-          <div className="card-header">
+        <div className="card border border-gray-200 shadow-none dark:border-coal-100">
+          <div className="card-header border-b border-gray-200 dark:border-coal-100">
             <h3 className="card-title">Session List</h3>
           </div>
           <div className="card-body max-h-[720px] overflow-auto flex flex-col gap-3">
@@ -712,14 +1137,14 @@ const ConversationsPage = () => {
                 className={`btn flex-col items-start !h-auto !justify-start !px-4 !py-3 border ${
                   item.conversationId === selectedConversationId
                     ? 'btn-primary'
-                    : 'btn-light border-gray-200 text-gray-800'
+                    : 'btn-light border-gray-200 text-gray-800 dark:border-coal-100 dark:text-gray-200'
                 }`}
                 onClick={() => void selectConversation(item.conversationId)}
               >
                 <span className="font-semibold">
                   {domainNameByUuid.get(item.domainId) || item.domainId.slice(0, 8)}
                 </span>
-                <span className="text-xs opacity-80">{item.conversationId}</span>
+                <span className="text-xs opacity-80">{item.currentIntent || 'No active intent'}</span>
                 <span className="text-xs opacity-80">
                   {item.sessionStatus} · {formatDateTime(item.startedAt)}
                 </span>
@@ -728,21 +1153,63 @@ const ConversationsPage = () => {
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Transcript</h3>
+        <div className="card border border-gray-200 shadow-none dark:border-coal-100">
+          <div className="card-header flex-wrap gap-3 border-b border-gray-200 dark:border-coal-100">
+            <div>
+              <h3 className="card-title">Transcript</h3>
+              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                {selectedConversation
+                  ? `${domainNameByUuid.get(selectedConversation.domainId) || selectedConversation.domainId} · ${selectedConversation.sessionStatus}`
+                  : 'Select a session to inspect the transcript.'}
+              </div>
+            </div>
+            {selectedConversation && (
+              <div className="ms-auto flex flex-wrap gap-2 text-xs">
+                <span className="badge badge-outline">{selectedConversation.channelType}</span>
+                {selectedConversation.escalatedToAgent && (
+                  <span className="badge badge-warning badge-outline">Escalated</span>
+                )}
+              </div>
+            )}
           </div>
           <div className="card-body max-h-[720px] overflow-auto flex flex-col gap-3">
-            {messages.length === 0 && <div className="text-sm text-gray-600">{busy ? 'Loading transcript...' : 'No transcript messages found.'}</div>}
-            {messages.map((item) => (
-              <div key={item.messageId} className="rounded-xl border border-gray-200 px-4 py-3">
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                  <span className="badge badge-outline">{item.speakerType}</span>
-                  <span>{item.messageType}</span>
+            {selectedConversation && (
+              <div className="rounded-xl border border-gray-200 bg-light px-4 py-3 dark:border-coal-100 dark:bg-coal-200">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-gray-400">Started</div>
+                    <div className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(selectedConversation.startedAt)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-gray-400">Status</div>
+                    <div className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{selectedConversation.sessionStatus}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-gray-400">Intent</div>
+                    <div className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{selectedConversation.currentIntent || '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-gray-400">Summary</div>
+                    <div className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{selectedConversation.summaryText || 'No summary available.'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {hiddenAudioChunkCount > 0 && (
+              <div className="rounded-xl border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-600 dark:border-coal-100 dark:text-gray-400">
+                {hiddenAudioChunkCount} raw audio chunk message{hiddenAudioChunkCount > 1 ? 's were' : ' was'} hidden to keep the transcript readable.
+              </div>
+            )}
+            {transcriptMessages.length === 0 && <div className="text-sm text-gray-600">{busy ? 'Loading transcript...' : 'No readable transcript messages found.'}</div>}
+            {transcriptMessages.map((item) => (
+              <div key={item.messageId} className="rounded-xl border border-gray-200 px-4 py-3 dark:border-coal-100">
+                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <span className="badge badge-outline">{getReadableSpeakerLabel(item.speakerType)}</span>
+                  <span>{getReadableMessageType(item)}</span>
                   <span>#{item.sequenceNo}</span>
                   <span>{formatDateTime(item.createdAt)}</span>
                 </div>
-                <div className="mt-2 text-sm text-gray-900 whitespace-pre-wrap">{item.messageText}</div>
+                <div className="mt-2 text-sm text-gray-900 whitespace-pre-wrap dark:text-white">{getReadableTranscriptText(item)}</div>
               </div>
             ))}
           </div>
@@ -814,7 +1281,7 @@ const EscalationsPage = () => {
   }, [form, load]);
 
   return (
-    <div className="ivr-admin-shell">
+    <div className="container-fluid grid gap-5">
       <IvrPageHeader
         title="Escalation Queue"
         description="Track unresolved escalations and create manual handoffs."
@@ -942,7 +1409,7 @@ const AgentsPage = () => {
   }, [form, load]);
 
   return (
-    <div className="ivr-admin-shell">
+    <div className="container-fluid grid gap-5">
       <IvrPageHeader
         title="Agents"
         description="Configure operator accounts available for escalation handoff."
@@ -1034,8 +1501,15 @@ const PromptsToolsPage = () => {
     handlerName: '',
     isActive: true
   });
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [editingToolId, setEditingToolId] = useState<string | null>(null);
+  const domainsRef = useRef<DomainConfig[]>([]);
 
   useToast(toast, () => setToast(null));
+
+  useEffect(() => {
+    domainsRef.current = domains;
+  }, [domains]);
 
   const selectedDomain = useMemo(
     () => domains.find((item) => item.domain_id === selectedDomainId) || null,
@@ -1043,9 +1517,10 @@ const PromptsToolsPage = () => {
   );
 
   const reloadSelected = useCallback(
-    async (domainCode: string, domainItems = domains) => {
+    async (domainCode: string, domainItems?: DomainConfig[]) => {
       setSelectedDomainId(domainCode);
-      const selected = domainItems.find((item) => item.domain_id === domainCode);
+      const availableDomains = domainItems ?? domainsRef.current;
+      const selected = availableDomains.find((item) => item.domain_id === domainCode);
       const domainUuid = resolveDomainUuid(selected);
       if (!domainUuid) {
         setPrompts([]);
@@ -1066,7 +1541,7 @@ const PromptsToolsPage = () => {
         setBusy(false);
       }
     },
-    [domains]
+    []
   );
 
   useEffect(() => {
@@ -1091,28 +1566,41 @@ const PromptsToolsPage = () => {
     void run();
   }, [reloadSelected]);
 
-  const onCreatePrompt = useCallback(async () => {
+  const onSavePrompt = useCallback(async () => {
     const domainUuid = resolveDomainUuid(selectedDomain);
     if (!domainUuid || !promptForm.templateText.trim()) return;
     setBusy(true);
     try {
-      await createPromptTemplate(domainUuid, promptForm);
+      if (editingPromptId) {
+        await updatePromptTemplate(domainUuid, editingPromptId, promptForm);
+        setToast({ kind: 'success', text: 'Prompt updated.' });
+      } else {
+        await createPromptTemplate(domainUuid, promptForm);
+        setToast({ kind: 'success', text: 'Prompt template created.' });
+      }
+      setEditingPromptId(null);
       setPromptForm({ promptType: 'welcome', templateText: '', versionNo: 1, isActive: true });
-      setToast({ kind: 'success', text: 'Prompt template created.' });
       await reloadSelected(selectedDomainId);
     } catch (error) {
-      setToast({ kind: 'danger', text: `Failed to create prompt: ${getErrorText(error)}` });
+      setToast({ kind: 'danger', text: `Failed to save prompt: ${getErrorText(error)}` });
     } finally {
       setBusy(false);
     }
-  }, [promptForm, reloadSelected, selectedDomain, selectedDomainId]);
+  }, [editingPromptId, promptForm, reloadSelected, selectedDomain, selectedDomainId]);
 
-  const onCreateTool = useCallback(async () => {
+  const onSaveTool = useCallback(async () => {
     const domainUuid = resolveDomainUuid(selectedDomain);
     if (!domainUuid || !toolForm.toolName.trim() || !toolForm.handlerName.trim()) return;
     setBusy(true);
     try {
-      await createToolDefinition(domainUuid, toolForm);
+      if (editingToolId) {
+        await updateToolDefinition(domainUuid, editingToolId, toolForm);
+        setToast({ kind: 'success', text: 'Tool updated.' });
+      } else {
+        await createToolDefinition(domainUuid, toolForm);
+        setToast({ kind: 'success', text: 'Tool definition created.' });
+      }
+      setEditingToolId(null);
       setToolForm({
         toolName: '',
         description: '',
@@ -1120,17 +1608,60 @@ const PromptsToolsPage = () => {
         handlerName: '',
         isActive: true
       });
-      setToast({ kind: 'success', text: 'Tool definition created.' });
       await reloadSelected(selectedDomainId);
     } catch (error) {
-      setToast({ kind: 'danger', text: `Failed to create tool: ${getErrorText(error)}` });
+      setToast({ kind: 'danger', text: `Failed to save tool: ${getErrorText(error)}` });
     } finally {
       setBusy(false);
     }
-  }, [reloadSelected, selectedDomain, selectedDomainId, toolForm]);
+  }, [editingToolId, reloadSelected, selectedDomain, selectedDomainId, toolForm]);
+
+  const onDeletePrompt = useCallback(async (promptTemplateId: string) => {
+    const domainUuid = resolveDomainUuid(selectedDomain);
+    if (!domainUuid || !window.confirm('Delete this prompt template?')) return;
+    setBusy(true);
+    try {
+      await deletePromptTemplate(domainUuid, promptTemplateId);
+      if (editingPromptId === promptTemplateId) {
+        setEditingPromptId(null);
+        setPromptForm({ promptType: 'welcome', templateText: '', versionNo: 1, isActive: true });
+      }
+      setToast({ kind: 'success', text: 'Prompt deleted.' });
+      await reloadSelected(selectedDomainId);
+    } catch (error) {
+      setToast({ kind: 'danger', text: `Failed to delete prompt: ${getErrorText(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  }, [editingPromptId, reloadSelected, selectedDomain, selectedDomainId]);
+
+  const onDeleteTool = useCallback(async (toolId: string) => {
+    const domainUuid = resolveDomainUuid(selectedDomain);
+    if (!domainUuid || !window.confirm('Delete this tool definition?')) return;
+    setBusy(true);
+    try {
+      await deleteToolDefinition(domainUuid, toolId);
+      if (editingToolId === toolId) {
+        setEditingToolId(null);
+        setToolForm({
+          toolName: '',
+          description: '',
+          schemaJson: '{"type":"object","properties":{}}',
+          handlerName: '',
+          isActive: true
+        });
+      }
+      setToast({ kind: 'success', text: 'Tool deleted.' });
+      await reloadSelected(selectedDomainId);
+    } catch (error) {
+      setToast({ kind: 'danger', text: `Failed to delete tool: ${getErrorText(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  }, [editingToolId, reloadSelected, selectedDomain, selectedDomainId]);
 
   return (
-    <div className="ivr-admin-shell">
+    <div className="container-fluid grid gap-5">
       <IvrPageHeader
         title="Prompts & Tools"
         description="Manage prompt templates and callable tools for each domain."
@@ -1155,9 +1686,16 @@ const PromptsToolsPage = () => {
               <input type="checkbox" checked={promptForm.isActive} onChange={(event) => setPromptForm((prev) => ({ ...prev, isActive: event.target.checked }))} />
               <span className="checkbox-label">Active template</span>
             </label>
-            <button className="btn btn-primary" onClick={() => void onCreatePrompt()} disabled={busy || !selectedDomainId}>
-              Create Prompt
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn btn-primary" onClick={() => void onSavePrompt()} disabled={busy || !selectedDomainId}>
+                {editingPromptId ? 'Update Prompt' : 'Create Prompt'}
+              </button>
+              {editingPromptId && (
+                <button className="btn btn-light" onClick={() => { setEditingPromptId(null); setPromptForm({ promptType: 'welcome', templateText: '', versionNo: 1, isActive: true }); }}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1174,9 +1712,16 @@ const PromptsToolsPage = () => {
               <input type="checkbox" checked={toolForm.isActive} onChange={(event) => setToolForm((prev) => ({ ...prev, isActive: event.target.checked }))} />
               <span className="checkbox-label">Active tool</span>
             </label>
-            <button className="btn btn-primary" onClick={() => void onCreateTool()} disabled={busy || !selectedDomainId}>
-              Create Tool
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn btn-primary" onClick={() => void onSaveTool()} disabled={busy || !selectedDomainId}>
+                {editingToolId ? 'Update Tool' : 'Create Tool'}
+              </button>
+              {editingToolId && (
+                <button className="btn btn-light" onClick={() => { setEditingToolId(null); setToolForm({ toolName: '', description: '', schemaJson: '{"type":"object","properties":{}}', handlerName: '', isActive: true }); }}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1194,16 +1739,31 @@ const PromptsToolsPage = () => {
                   <th>Version</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {prompts.length === 0 && <EmptyRow colSpan={4} text={busy ? 'Loading prompts...' : 'No prompts found.'} />}
+                {prompts.length === 0 && <EmptyRow colSpan={5} text={busy ? 'Loading prompts...' : 'No prompts found.'} />}
                 {prompts.map((item) => (
                   <tr key={item.promptTemplateId}>
                     <td>{item.promptType}</td>
                     <td>{item.versionNo}</td>
                     <td>{item.isActive ? 'Active' : 'Inactive'}</td>
                     <td>{formatDateTime(item.createdAt)}</td>
+                    <td className="text-end">
+                      <ActionButtons
+                        onEdit={() => {
+                          setEditingPromptId(item.promptTemplateId);
+                          setPromptForm({
+                            promptType: item.promptType,
+                            templateText: item.templateText,
+                            versionNo: item.versionNo,
+                            isActive: item.isActive
+                          });
+                        }}
+                        onDelete={() => void onDeletePrompt(item.promptTemplateId)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1223,10 +1783,11 @@ const PromptsToolsPage = () => {
                   <th>Handler</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {tools.length === 0 && <EmptyRow colSpan={4} text={busy ? 'Loading tools...' : 'No tools found.'} />}
+                {tools.length === 0 && <EmptyRow colSpan={5} text={busy ? 'Loading tools...' : 'No tools found.'} />}
                 {tools.map((item) => (
                   <tr key={item.toolId}>
                     <td>
@@ -1236,6 +1797,21 @@ const PromptsToolsPage = () => {
                     <td>{item.handlerName}</td>
                     <td>{item.isActive ? 'Active' : 'Inactive'}</td>
                     <td>{formatDateTime(item.createdAt)}</td>
+                    <td className="text-end">
+                      <ActionButtons
+                        onEdit={() => {
+                          setEditingToolId(item.toolId);
+                          setToolForm({
+                            toolName: item.toolName,
+                            description: item.description,
+                            schemaJson: item.schemaJson,
+                            handlerName: item.handlerName,
+                            isActive: item.isActive
+                          });
+                        }}
+                        onDelete={() => void onDeleteTool(item.toolId)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>

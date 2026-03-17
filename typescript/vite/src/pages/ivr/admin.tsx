@@ -1,5 +1,11 @@
 import { ReactNode, useEffect } from 'react';
-import './ivr-admin.css';
+import {
+  Toolbar,
+  ToolbarActions,
+  ToolbarDescription,
+  ToolbarHeading,
+  ToolbarPageTitle
+} from '@/partials/toolbar';
 
 type Toast = { kind: 'success' | 'danger'; text: string } | null;
 
@@ -32,15 +38,13 @@ export function IvrPageHeader(props: {
   actions?: ReactNode;
 }) {
   return (
-    <div className="card ivr-admin-hero">
-      <div className="card-header flex-wrap gap-3">
-        <div>
-          <h3 className="ivr-admin-title">{props.title}</h3>
-          <div className="text-sm mt-2 ivr-admin-description">{props.description}</div>
-        </div>
-        {props.actions && <div className="ms-auto flex flex-wrap gap-2">{props.actions}</div>}
-      </div>
-    </div>
+    <Toolbar>
+      <ToolbarHeading>
+        <ToolbarPageTitle text={props.title} />
+        <ToolbarDescription>{props.description}</ToolbarDescription>
+      </ToolbarHeading>
+      {props.actions && <ToolbarActions>{props.actions}</ToolbarActions>}
+    </Toolbar>
   );
 }
 
@@ -51,12 +55,20 @@ export function IvrStatCard(props: {
   tone?: 'teal' | 'blue' | 'amber' | 'rose';
 }) {
   const tone = props.tone || 'teal';
+  const toneClass = {
+    teal: 'border-success/20 bg-success/10 text-success',
+    blue: 'border-primary/20 bg-primary/10 text-primary',
+    amber: 'border-warning/20 bg-warning/10 text-warning',
+    rose: 'border-danger/20 bg-danger/10 text-danger'
+  }[tone];
   return (
-    <div className={`card ivr-stat-card ${tone}`}>
+    <div className="card border border-gray-200 shadow-none dark:border-coal-100">
       <div className="card-body">
-        <div className={`ivr-stat-chip ${tone}`}>{props.label}</div>
-        <div className="text-2xl font-semibold text-gray-900 mt-3">{props.value}</div>
-        {props.meta && <div className="text-xs text-gray-600 mt-2">{props.meta}</div>}
+        <div className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[0.72rem] font-bold uppercase tracking-[0.08em] ${toneClass}`}>
+          {props.label}
+        </div>
+        <div className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">{props.value}</div>
+        {props.meta && <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">{props.meta}</div>}
       </div>
     </div>
   );
@@ -65,7 +77,7 @@ export function IvrStatCard(props: {
 export function IvrToast({ toast }: { toast: Toast }) {
   if (!toast) return null;
   return (
-    <div className="fixed bottom-6 right-6 z-[100] ivr-floating-toast">
+    <div className="fixed bottom-6 right-6 z-[100]">
       <div className={`alert ${toast.kind === 'success' ? 'alert-success' : 'alert-danger'}`}>
         {toast.text}
       </div>

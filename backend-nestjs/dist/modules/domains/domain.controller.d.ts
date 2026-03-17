@@ -1,16 +1,20 @@
 import { DomainIntentsService } from '../domain-intents/domain-intents.service';
 import { DomainRulesService } from '../domain-rules/domain-rules.service';
+import { PromptTemplatesService } from '../prompt-templates/prompt-templates.service';
 import { DomainService } from './domain.service';
 export declare class DomainController {
     private readonly domainService;
     private readonly domainIntentsService;
     private readonly domainRulesService;
-    constructor(domainService: DomainService, domainIntentsService: DomainIntentsService, domainRulesService: DomainRulesService);
+    private readonly promptTemplatesService;
+    constructor(domainService: DomainService, domainIntentsService: DomainIntentsService, domainRulesService: DomainRulesService, promptTemplatesService: PromptTemplatesService);
     private toLegacyDomain;
     private slugify;
     private inferIndustry;
     private buildSeedConfig;
     private seedDomainData;
+    private buildDefaultSystemPrompt;
+    private syncPromptTemplates;
     list(): Promise<{
         items: {
             domain_uuid: any;
@@ -21,6 +25,7 @@ export declare class DomainController {
             voice: any;
             language: any;
             welcome_message: any;
+            fallback_message: any;
             intents: string[];
             rules: string[];
             compliance: string[];
@@ -39,6 +44,7 @@ export declare class DomainController {
         voice: any;
         language: any;
         welcome_message: any;
+        fallback_message: any;
         intents: string[];
         rules: string[];
         compliance: string[];
@@ -59,6 +65,7 @@ export declare class DomainController {
         voice: any;
         language: any;
         welcome_message: any;
+        fallback_message: any;
         intents: string[];
         rules: string[];
         compliance: string[];
@@ -76,6 +83,7 @@ export declare class DomainController {
         voice: any;
         language: any;
         welcome_message: any;
+        fallback_message: any;
         intents: string[];
         rules: string[];
         compliance: string[];
@@ -93,6 +101,7 @@ export declare class DomainController {
         voice: any;
         language: any;
         welcome_message: any;
+        fallback_message: any;
         intents: string[];
         rules: string[];
         compliance: string[];

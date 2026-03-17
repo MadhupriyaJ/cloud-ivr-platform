@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { KeenIcon } from '@/components';
 import { fetchDomains } from './api';
+import { IvrPageHeader } from './admin';
 import { useRealtimeIvr } from './useRealtimeIvr';
-import './ivr-admin.css';
 import type { DomainConfig } from './types';
 
 const LAST_TESTED_DOMAIN_KEY = 'ivr:last_tested_domain_id';
@@ -11,12 +11,13 @@ const LAST_TESTED_DOMAIN_KEY = 'ivr:last_tested_domain_id';
 const DomainTestPage = () => {
   const { domainId } = useParams();
   const navigate = useNavigate();
-  const { status, logs, start, stop, clearLogs } = useRealtimeIvr();
-
+  const { status, logs, avatarReady, setAvatarVideoElement, start, stop, clearLogs } =
+    useRealtimeIvr();
   const [domains, setDomains] = useState<DomainConfig[]>([]);
   const [busy, setBusy] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const avatarVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const statusClass = useMemo(() => {
     if (status === 'connected') return 'badge badge-success badge-outline';
@@ -59,6 +60,11 @@ const DomainTestPage = () => {
     };
   }, [stop]);
 
+  useEffect(() => {
+    setAvatarVideoElement(avatarVideoRef.current);
+    return () => setAvatarVideoElement(null);
+  }, [setAvatarVideoElement]);
+
   const selectedDomain = useMemo(
     () => domains.find((item) => item.domain_id === domainId) ?? null,
     [domainId, domains]
@@ -80,9 +86,18 @@ const DomainTestPage = () => {
   }
 
   return (
-    <div className="ivr-admin-shell xl:grid-cols-[320px_1fr]">
-      <div className="card">
-        <div className="card-header">
+    <div className="container-fluid grid gap-5 xl:grid-cols-[320px_1fr]">
+      <div className="xl:col-span-2">
+        <IvrPageHeader
+          title="Realtime IVR Test"
+          description={selectedDomain ? `Live testing for ${selectedDomain.display_name}` : 'Load a domain and start a realtime IVR session.'}
+          actions={
+            <span className={`${statusClass}`}>{statusLabel}</span>
+          }
+        />
+      </div>
+      <div className="card border border-gray-200 shadow-none dark:border-coal-100">
+        <div className="card-header border-b border-gray-200 dark:border-coal-100">
           <h3 className="card-title">Available Domains</h3>
         </div>
         <div className="card-body flex flex-col gap-3">
@@ -120,17 +135,31 @@ const DomainTestPage = () => {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header flex-wrap gap-2">
+      <div className="card border border-gray-200 shadow-none dark:border-coal-100">
+        <div className="card-header flex-wrap gap-2 border-b border-gray-200 dark:border-coal-100">
           <div>
             <h3 className="card-title">Realtime IVR Test</h3>
             <div className="text-xs text-gray-600 mt-1">
               Domain: <span className="font-semibold text-gray-800">{selectedDomain?.display_name || domainId}</span>
             </div>
           </div>
-          <span className={`${statusClass} ms-auto`}>{statusLabel}</span>
+          <span className={`${statusClass} ms-auto xl:hidden`}>{statusLabel}</span>
         </div>
         <div className="card-body flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 bg-light p-4">
+              <div className="text-xs text-gray-600">Connection State</div>
+              <div className="mt-2 font-semibold text-gray-900">{statusLabel}</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-light p-4">
+              <div className="text-xs text-gray-600">Domain Code</div>
+              <div className="mt-2 font-semibold text-gray-900">{domainId}</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-light p-4">
+              <div className="text-xs text-gray-600">Log Entries</div>
+              <div className="mt-2 font-semibold text-gray-900">{logs.length}</div>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2.5">
             <button
               className="btn btn-primary"
@@ -138,7 +167,7 @@ const DomainTestPage = () => {
               disabled={status !== 'idle'}
             >
               <KeenIcon icon="phone" className="me-2" />
-              Start Session
+              Start Session with Avatar
             </button>
             <button className="btn btn-warning" onClick={stop} disabled={status === 'idle'}>
               <KeenIcon icon="cross-circle" className="me-2" />
@@ -150,7 +179,40 @@ const DomainTestPage = () => {
             </button>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-gray-900 p-4 text-sm text-gray-100 overflow-auto min-h-[420px]">
+          <div className="rounded-xl border border-gray-200 bg-light p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Azure Avatar</div>
+                <div className="mt-1 text-xs text-gray-600">
+                  {avatarReady
+                    ? 'Avatar connected and speaking.'
+                    : 'Avatar will connect when the session starts.'}
+                </div>
+              </div>
+              <span
+                className={`badge badge-sm ${avatarReady ? 'badge-success' : 'badge-secondary'}`}
+              >
+                {avatarReady ? 'Ready' : 'Idle'}
+              </span>
+            </div>
+
+            <div className="relative flex min-h-[320px] items-center justify-center overflow-hidden rounded-xl bg-gray-950">
+              <video
+                ref={avatarVideoRef}
+                autoPlay
+                playsInline
+                muted={false}
+                className="h-full w-full object-cover"
+              />
+              {!avatarReady && (
+                <div className="absolute px-4 text-center text-xs text-gray-400">
+                  Avatar will connect after clicking the Start Session button.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="min-h-[420px] overflow-auto rounded-xl border border-gray-200 bg-gray-900 p-4 text-sm text-gray-100">
             {logs.length === 0 ? (
               <div className="text-gray-500">Logs will appear here.</div>
             ) : (

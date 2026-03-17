@@ -16,6 +16,7 @@ exports.DomainIntentsController = void 0;
 const common_1 = require("@nestjs/common");
 const domain_intents_service_1 = require("./domain-intents.service");
 const create_domain_intent_dto_1 = require("./dto/create-domain-intent.dto");
+const update_domain_intent_dto_1 = require("./dto/update-domain-intent.dto");
 let DomainIntentsController = class DomainIntentsController {
     service;
     constructor(service) {
@@ -28,6 +29,13 @@ let DomainIntentsController = class DomainIntentsController {
     }
     async create(domainId, payload) {
         return this.service.create(domainId, payload);
+    }
+    async update(domainId, intentId, payload) {
+        return this.service.update(domainId, intentId, payload);
+    }
+    async remove(domainId, intentId) {
+        await this.service.remove(domainId, intentId);
+        return { success: true };
     }
 };
 exports.DomainIntentsController = DomainIntentsController;
@@ -46,6 +54,23 @@ __decorate([
     __metadata("design:paramtypes", [String, create_domain_intent_dto_1.CreateDomainIntentDto]),
     __metadata("design:returntype", Promise)
 ], DomainIntentsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Patch)(':intentId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('intentId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_domain_intent_dto_1.UpdateDomainIntentDto]),
+    __metadata("design:returntype", Promise)
+], DomainIntentsController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':intentId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('intentId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], DomainIntentsController.prototype, "remove", null);
 exports.DomainIntentsController = DomainIntentsController = __decorate([
     (0, common_1.Controller)('domains/:domainId/intents'),
     __metadata("design:paramtypes", [domain_intents_service_1.DomainIntentsService])

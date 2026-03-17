@@ -103,15 +103,9 @@ async function bootstrap() {
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
             voice: started.voice || 'alloy',
-            instructions: [
-              `You are the voice IVR assistant for ${started.organizationName}.`,
-              'Speak clearly, politely, and briefly.',
-              'Keep most replies within one or two short sentences.',
-              'Ask one question at a time.',
-              'Never answer outside the configured business scope.',
-            ].join(' '),
+            instructions: started.instructions,
             modalities: ['text', 'audio'],
-            temperature: 0.3,
+            temperature: 0.8,
             max_response_output_tokens: 128,
           },
         };

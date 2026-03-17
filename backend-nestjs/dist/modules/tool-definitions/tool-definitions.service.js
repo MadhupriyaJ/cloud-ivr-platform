@@ -32,6 +32,20 @@ let ToolDefinitionsService = class ToolDefinitionsService {
         const entity = this.repository.create({ ...payload, domainId });
         return this.repository.save(entity);
     }
+    async update(domainId, toolId, payload) {
+        const entity = await this.repository.findOne({ where: { domainId, toolId } });
+        if (!entity) {
+            throw new common_1.NotFoundException(`Tool '${toolId}' not found`);
+        }
+        Object.assign(entity, payload);
+        return this.repository.save(entity);
+    }
+    async remove(domainId, toolId) {
+        const result = await this.repository.delete({ domainId, toolId });
+        if (!result.affected) {
+            throw new common_1.NotFoundException(`Tool '${toolId}' not found`);
+        }
+    }
 };
 exports.ToolDefinitionsService = ToolDefinitionsService;
 exports.ToolDefinitionsService = ToolDefinitionsService = __decorate([

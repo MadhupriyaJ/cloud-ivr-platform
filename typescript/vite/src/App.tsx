@@ -8,13 +8,14 @@ import { Toaster } from '@/components/ui/sonner';
 const { BASE_URL } = import.meta.env;
 
 const App = () => {
-  const { settings } = useSettings();
+  const { settings, getThemeMode } = useSettings();
 
   useEffect(() => {
+    const resolvedThemeMode = getThemeMode();
     document.documentElement.classList.remove('dark');
     document.documentElement.classList.remove('light');
-    document.documentElement.classList.add(settings.themeMode);
-  }, [settings]);
+    document.documentElement.classList.add(resolvedThemeMode);
+  }, [getThemeMode, settings]);
 
   return (
     <BrowserRouter

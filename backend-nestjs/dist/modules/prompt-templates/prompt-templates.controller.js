@@ -16,6 +16,7 @@ exports.PromptTemplatesController = void 0;
 const common_1 = require("@nestjs/common");
 const prompt_templates_service_1 = require("./prompt-templates.service");
 const create_prompt_template_dto_1 = require("./dto/create-prompt-template.dto");
+const update_prompt_template_dto_1 = require("./dto/update-prompt-template.dto");
 let PromptTemplatesController = class PromptTemplatesController {
     service;
     constructor(service) {
@@ -28,6 +29,13 @@ let PromptTemplatesController = class PromptTemplatesController {
     }
     async create(domainId, payload) {
         return this.service.create(domainId, payload);
+    }
+    async update(domainId, promptTemplateId, payload) {
+        return this.service.update(domainId, promptTemplateId, payload);
+    }
+    async remove(domainId, promptTemplateId) {
+        await this.service.remove(domainId, promptTemplateId);
+        return { success: true };
     }
 };
 exports.PromptTemplatesController = PromptTemplatesController;
@@ -46,6 +54,23 @@ __decorate([
     __metadata("design:paramtypes", [String, create_prompt_template_dto_1.CreatePromptTemplateDto]),
     __metadata("design:returntype", Promise)
 ], PromptTemplatesController.prototype, "create", null);
+__decorate([
+    (0, common_1.Patch)(':promptTemplateId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('promptTemplateId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_prompt_template_dto_1.UpdatePromptTemplateDto]),
+    __metadata("design:returntype", Promise)
+], PromptTemplatesController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':promptTemplateId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('promptTemplateId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], PromptTemplatesController.prototype, "remove", null);
 exports.PromptTemplatesController = PromptTemplatesController = __decorate([
     (0, common_1.Controller)('domains/:domainId/prompts'),
     __metadata("design:paramtypes", [prompt_templates_service_1.PromptTemplatesService])

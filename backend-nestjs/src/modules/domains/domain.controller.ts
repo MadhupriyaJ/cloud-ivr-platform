@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { DomainIntentsService } from '../domain-intents/domain-intents.service';
 import { DomainRulesService } from '../domain-rules/domain-rules.service';
+import { PromptTemplatesService } from '../prompt-templates/prompt-templates.service';
 import { DomainService } from './domain.service';
 import { CreateDomainDto } from './dto/create-domain.dto';
 
@@ -10,6 +11,7 @@ export class DomainController {
     private readonly domainService: DomainService,
     private readonly domainIntentsService: DomainIntentsService,
     private readonly domainRulesService: DomainRulesService,
+    private readonly promptTemplatesService: PromptTemplatesService,
   ) {}
 
   private async toLegacyDomain(domain: any) {
@@ -27,6 +29,7 @@ export class DomainController {
       voice: domain.defaultVoice,
       language: domain.defaultLanguage,
       welcome_message: domain.welcomeMessage,
+      fallback_message: domain.fallbackMessage,
       intents: intents.filter((item) => item.isActive).map((item) => item.intentLabel || item.intentCode),
       rules: rules
         .filter((item) => item.isActive && item.ruleType.toLowerCase() !== 'compliance')
@@ -64,6 +67,8 @@ export class DomainController {
           'If caller is unclear, repeat the available options.',
         ],
         compliance: ['Do not expose patient details without verification.'],
+        fallbackMessage:
+          'I can help only with appointments, lab reports, billing, or operator support. Please say one of these options or say operator.',
         escalationMessage: 'Connecting you to a hospital operator.',
       };
     }
@@ -77,6 +82,8 @@ export class DomainController {
           'Ask one short question per turn.',
         ],
         compliance: ['Do not share account details before verification.'],
+        fallbackMessage:
+          'I can help only with balance enquiry, card block, loan support, or operator requests. Please say one of these options or say operator.',
         escalationMessage: 'Connecting you to a banking support agent.',
       };
     }
@@ -90,6 +97,8 @@ export class DomainController {
           'Escalate if policy lookup fails repeatedly.',
         ],
         compliance: ['Do not disclose policy data without verification.'],
+        fallbackMessage:
+          'I can help only with policy status, claim status, premium enquiry, or operator support. Please say one of these options or say operator.',
         escalationMessage: 'Connecting you to an insurance support agent.',
       };
     }
@@ -103,6 +112,8 @@ export class DomainController {
           'Offer operator transfer after repeated failures.',
         ],
         compliance: ['Do not disclose shipment details without basic verification.'],
+        fallbackMessage:
+          'I can help only with shipment tracking, delivery issues, invoice enquiries, or operator support. Please say one of these options or say operator.',
         escalationMessage: 'Connecting you to a logistics support agent.',
       };
     }
@@ -115,6 +126,8 @@ export class DomainController {
         'Offer operator transfer when the request is unclear.',
       ],
       compliance: ['Do not share confidential information without verification.'],
+      fallbackMessage:
+        'I can help only with sales, support, billing, or operator requests. Please say one of these options or say operator.',
       escalationMessage: 'Connecting you to an operator.',
     };
   }
@@ -148,6 +161,44 @@ export class DomainController {
         isActive: true,
       });
     }
+  }
+
+  private buildDefaultSystemPrompt(organizationName: string) {
+    return `You are the IVR assistant for ${organizationName}. Handle only the configured business intents, follow the active domain rules and compliance instructions, and use the saved fallback or escalation response when the request is unsupported.`;
+  }
+
+  private async syncPromptTemplates(domainId: string, payload: {
+    organizationName: string;
+    welcomeMessage: string;
+    fallbackMessage: string;
+    escalationMessage: string;
+  }) {
+    await Promise.all([
+      this.promptTemplatesService.upsertActiveTemplate(domainId, {
+        promptType: 'welcome',
+        templateText: payload.welcomeMessage,
+        versionNo: 1,
+        isActive: true,
+      }),
+      this.promptTemplatesService.upsertActiveTemplate(domainId, {
+        promptType: 'fallback',
+        templateText: payload.fallbackMessage,
+        versionNo: 1,
+        isActive: true,
+      }),
+      this.promptTemplatesService.upsertActiveTemplate(domainId, {
+        promptType: 'escalation',
+        templateText: payload.escalationMessage,
+        versionNo: 1,
+        isActive: true,
+      }),
+      this.promptTemplatesService.upsertActiveTemplate(domainId, {
+        promptType: 'system',
+        templateText: this.buildDefaultSystemPrompt(payload.organizationName),
+        versionNo: 1,
+        isActive: true,
+      }),
+    ]);
   }
 
   @Get()
@@ -186,12 +237,18 @@ export class DomainController {
       defaultLanguage: 'English',
       defaultVoice: 'alloy',
       welcomeMessage: `Welcome to ${organizationName}. Please tell me how I can help.`,
-      fallbackMessage: 'Please repeat your request or say operator.',
+      fallbackMessage: seed.fallbackMessage,
       escalationMessage: seed.escalationMessage,
       isActive: true,
     });
 
     await this.seedDomainData(created.domainId, seed);
+    await this.syncPromptTemplates(created.domainId, {
+      organizationName,
+      welcomeMessage: created.welcomeMessage,
+      fallbackMessage: created.fallbackMessage,
+      escalationMessage: created.escalationMessage,
+    });
     return this.toLegacyDomain(created);
   }
 
@@ -205,9 +262,22 @@ export class DomainController {
       defaultLanguage: payload.defaultLanguage ?? payload.language,
       defaultVoice: payload.defaultVoice ?? payload.voice,
       welcomeMessage: payload.welcomeMessage ?? payload.welcome_message,
-      fallbackMessage: payload.fallbackMessage ?? 'Please repeat your request or say operator.',
+      fallbackMessage:
+        payload.fallbackMessage ??
+        payload.fallback_message ??
+        this.buildSeedConfig(
+          payload.displayName ?? payload.display_name ?? payload.domainCode ?? payload.domain_id ?? 'General Support',
+          payload.organizationName ?? payload.organization_name ?? 'General Support',
+          payload.industryType ?? payload.industry ?? 'general',
+        ).fallbackMessage,
       escalationMessage: payload.escalationMessage ?? payload.escalation_message,
       isActive: payload.isActive ?? payload.active,
+    });
+    await this.syncPromptTemplates(created.domainId, {
+      organizationName: created.organizationName,
+      welcomeMessage: created.welcomeMessage,
+      fallbackMessage: created.fallbackMessage,
+      escalationMessage: created.escalationMessage,
     });
     return this.toLegacyDomain(created);
   }
@@ -222,9 +292,22 @@ export class DomainController {
       defaultLanguage: payload.defaultLanguage ?? payload.language,
       defaultVoice: payload.defaultVoice ?? payload.voice,
       welcomeMessage: payload.welcomeMessage ?? payload.welcome_message,
-      fallbackMessage: payload.fallbackMessage ?? 'Please repeat your request or say operator.',
+      fallbackMessage:
+        payload.fallbackMessage ??
+        payload.fallback_message ??
+        this.buildSeedConfig(
+          payload.displayName ?? payload.display_name ?? domainCode,
+          payload.organizationName ?? payload.organization_name ?? 'General Support',
+          payload.industryType ?? payload.industry ?? 'general',
+        ).fallbackMessage,
       escalationMessage: payload.escalationMessage ?? payload.escalation_message,
       isActive: payload.isActive ?? payload.active,
+    });
+    await this.syncPromptTemplates(updated.domainId, {
+      organizationName: updated.organizationName,
+      welcomeMessage: updated.welcomeMessage,
+      fallbackMessage: updated.fallbackMessage,
+      escalationMessage: updated.escalationMessage,
     });
     return this.toLegacyDomain(updated);
   }

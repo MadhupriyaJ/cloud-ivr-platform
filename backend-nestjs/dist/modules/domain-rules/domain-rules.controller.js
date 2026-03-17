@@ -16,6 +16,7 @@ exports.DomainRulesController = void 0;
 const common_1 = require("@nestjs/common");
 const domain_rules_service_1 = require("./domain-rules.service");
 const create_domain_rule_dto_1 = require("./dto/create-domain-rule.dto");
+const update_domain_rule_dto_1 = require("./dto/update-domain-rule.dto");
 let DomainRulesController = class DomainRulesController {
     service;
     constructor(service) {
@@ -28,6 +29,13 @@ let DomainRulesController = class DomainRulesController {
     }
     async create(domainId, payload) {
         return this.service.create(domainId, payload);
+    }
+    async update(domainId, ruleId, payload) {
+        return this.service.update(domainId, ruleId, payload);
+    }
+    async remove(domainId, ruleId) {
+        await this.service.remove(domainId, ruleId);
+        return { success: true };
     }
 };
 exports.DomainRulesController = DomainRulesController;
@@ -46,6 +54,23 @@ __decorate([
     __metadata("design:paramtypes", [String, create_domain_rule_dto_1.CreateDomainRuleDto]),
     __metadata("design:returntype", Promise)
 ], DomainRulesController.prototype, "create", null);
+__decorate([
+    (0, common_1.Patch)(':ruleId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('ruleId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_domain_rule_dto_1.UpdateDomainRuleDto]),
+    __metadata("design:returntype", Promise)
+], DomainRulesController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':ruleId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('ruleId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], DomainRulesController.prototype, "remove", null);
 exports.DomainRulesController = DomainRulesController = __decorate([
     (0, common_1.Controller)('domains/:domainId/rules'),
     __metadata("design:paramtypes", [domain_rules_service_1.DomainRulesService])

@@ -19,7 +19,9 @@ let SpeechController = class SpeechController {
     }
     async issueToken() {
         const region = this.configService.get('azure.speechRegion') || process.env.AZURE_SPEECH_REGION;
-        const apiKey = this.configService.get('azure.speechApiKey') || process.env.AZURE_SPEECH_API_KEY;
+        const apiKey = this.configService.get('azure.speechApiKey') ||
+            process.env.AZURE_SPEECH_API_KEY ||
+            process.env.AZURE_SPEECH_API;
         if (!region || !apiKey) {
             throw new common_1.HttpException('Azure Speech configuration missing.', common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -40,6 +42,31 @@ let SpeechController = class SpeechController {
             region,
         };
     }
+    async issueAvatarRelayToken() {
+        const region = this.configService.get('azure.avatarRegion') ||
+            this.configService.get('azure.speechRegion') ||
+            process.env.AZURE_AVATAR_REGION ||
+            process.env.AZURE_SPEECH_REGION;
+        const apiKey = this.configService.get('azure.avatarApiKey') ||
+            this.configService.get('azure.speechApiKey') ||
+            process.env.AZURE_AVATAR_API_KEY ||
+            process.env.AZURE_SPEECH_API_KEY ||
+            process.env.AZURE_SPEECH_API;
+        if (!region || !apiKey) {
+            throw new common_1.HttpException('Azure Avatar Speech configuration missing.', common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        const response = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1`, {
+            method: 'GET',
+            headers: {
+                'Ocp-Apim-Subscription-Key': apiKey,
+            },
+        });
+        if (!response.ok) {
+            const detail = await response.text().catch(() => '');
+            throw new common_1.HttpException(`Azure avatar relay token request failed with status ${response.status}.${detail ? ` ${detail}` : ''}`, common_1.HttpStatus.BAD_GATEWAY);
+        }
+        return response.json();
+    }
 };
 exports.SpeechController = SpeechController;
 __decorate([
@@ -48,6 +75,12 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], SpeechController.prototype, "issueToken", null);
+__decorate([
+    (0, common_1.Get)('avatar-relay-token'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], SpeechController.prototype, "issueAvatarRelayToken", null);
 exports.SpeechController = SpeechController = __decorate([
     (0, common_1.Controller)('speech'),
     __metadata("design:paramtypes", [config_1.ConfigService])

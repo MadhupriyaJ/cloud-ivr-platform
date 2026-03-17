@@ -16,6 +16,7 @@ exports.ToolDefinitionsController = void 0;
 const common_1 = require("@nestjs/common");
 const tool_definitions_service_1 = require("./tool-definitions.service");
 const create_tool_definition_dto_1 = require("./dto/create-tool-definition.dto");
+const update_tool_definition_dto_1 = require("./dto/update-tool-definition.dto");
 let ToolDefinitionsController = class ToolDefinitionsController {
     service;
     constructor(service) {
@@ -28,6 +29,13 @@ let ToolDefinitionsController = class ToolDefinitionsController {
     }
     async create(domainId, payload) {
         return this.service.create(domainId, payload);
+    }
+    async update(domainId, toolId, payload) {
+        return this.service.update(domainId, toolId, payload);
+    }
+    async remove(domainId, toolId) {
+        await this.service.remove(domainId, toolId);
+        return { success: true };
     }
 };
 exports.ToolDefinitionsController = ToolDefinitionsController;
@@ -46,6 +54,23 @@ __decorate([
     __metadata("design:paramtypes", [String, create_tool_definition_dto_1.CreateToolDefinitionDto]),
     __metadata("design:returntype", Promise)
 ], ToolDefinitionsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Patch)(':toolId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('toolId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_tool_definition_dto_1.UpdateToolDefinitionDto]),
+    __metadata("design:returntype", Promise)
+], ToolDefinitionsController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':toolId'),
+    __param(0, (0, common_1.Param)('domainId')),
+    __param(1, (0, common_1.Param)('toolId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], ToolDefinitionsController.prototype, "remove", null);
 exports.ToolDefinitionsController = ToolDefinitionsController = __decorate([
     (0, common_1.Controller)('domains/:domainId/tools'),
     __metadata("design:paramtypes", [tool_definitions_service_1.ToolDefinitionsService])

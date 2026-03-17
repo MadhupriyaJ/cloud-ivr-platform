@@ -89,6 +89,34 @@ export async function createDomainIntent(
   });
 }
 
+export async function updateDomainIntent(
+  domainUuid: string,
+  intentId: string,
+  payload: {
+    intentCode?: string;
+    intentLabel?: string;
+    description?: string;
+    priority?: number;
+    isActive?: boolean;
+  }
+): Promise<DomainIntent> {
+  return fetchJson<DomainIntent>(
+    `/api/domains/${encodeURIComponent(domainUuid)}/intents/${encodeURIComponent(intentId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function deleteDomainIntent(domainUuid: string, intentId: string): Promise<void> {
+  await fetchJson(
+    `/api/domains/${encodeURIComponent(domainUuid)}/intents/${encodeURIComponent(intentId)}`,
+    { method: 'DELETE' }
+  );
+}
+
 export async function fetchDomainRules(domainUuid: string): Promise<DomainRule[]> {
   return fetchItems<DomainRule>(`/api/domains/${encodeURIComponent(domainUuid)}/rules`);
 }
@@ -107,6 +135,33 @@ export async function createDomainRule(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+}
+
+export async function updateDomainRule(
+  domainUuid: string,
+  ruleId: string,
+  payload: {
+    ruleType?: string;
+    ruleText?: string;
+    priority?: number;
+    isActive?: boolean;
+  }
+): Promise<DomainRule> {
+  return fetchJson<DomainRule>(
+    `/api/domains/${encodeURIComponent(domainUuid)}/rules/${encodeURIComponent(ruleId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function deleteDomainRule(domainUuid: string, ruleId: string): Promise<void> {
+  await fetchJson(
+    `/api/domains/${encodeURIComponent(domainUuid)}/rules/${encodeURIComponent(ruleId)}`,
+    { method: 'DELETE' }
+  );
 }
 
 export async function fetchConversations(): Promise<Conversation[]> {
@@ -175,6 +230,33 @@ export async function createPromptTemplate(
   });
 }
 
+export async function updatePromptTemplate(
+  domainUuid: string,
+  promptTemplateId: string,
+  payload: {
+    promptType?: string;
+    templateText?: string;
+    versionNo?: number;
+    isActive?: boolean;
+  }
+): Promise<PromptTemplate> {
+  return fetchJson<PromptTemplate>(
+    `/api/domains/${encodeURIComponent(domainUuid)}/prompts/${encodeURIComponent(promptTemplateId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function deletePromptTemplate(domainUuid: string, promptTemplateId: string): Promise<void> {
+  await fetchJson(
+    `/api/domains/${encodeURIComponent(domainUuid)}/prompts/${encodeURIComponent(promptTemplateId)}`,
+    { method: 'DELETE' }
+  );
+}
+
 export async function fetchToolDefinitions(domainUuid: string): Promise<ToolDefinition[]> {
   return fetchItems<ToolDefinition>(`/api/domains/${encodeURIComponent(domainUuid)}/tools`);
 }
@@ -194,4 +276,32 @@ export async function createToolDefinition(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+}
+
+export async function updateToolDefinition(
+  domainUuid: string,
+  toolId: string,
+  payload: {
+    toolName?: string;
+    description?: string;
+    schemaJson?: string;
+    handlerName?: string;
+    isActive?: boolean;
+  }
+): Promise<ToolDefinition> {
+  return fetchJson<ToolDefinition>(
+    `/api/domains/${encodeURIComponent(domainUuid)}/tools/${encodeURIComponent(toolId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function deleteToolDefinition(domainUuid: string, toolId: string): Promise<void> {
+  await fetchJson(
+    `/api/domains/${encodeURIComponent(domainUuid)}/tools/${encodeURIComponent(toolId)}`,
+    { method: 'DELETE' }
+  );
 }

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { KeenIcon } from '@/components';
 import { fetchDomain, generateDomain, saveDomain } from './api';
+import { IvrPageHeader, IvrToast, useToast } from './admin';
 import { EMPTY_DOMAIN, fromLines, toLines, toPayload } from './form';
-import './ivr-admin.css';
 import type { DomainPayload } from './types';
 
 type Toast = { kind: 'success' | 'danger'; text: string } | null;
@@ -21,6 +21,7 @@ const DomainConfigPage = () => {
   const [seedOrganization, setSeedOrganization] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
+  useToast(toast, () => setToast(null));
 
   const pageTitle = useMemo(
     () => (isCreateMode ? 'Create + Configure Domain' : `Configure: ${domainId}`),
@@ -56,12 +57,6 @@ const DomainConfigPage = () => {
   useEffect(() => {
     void loadDomain();
   }, [loadDomain]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 3500);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   const onGenerate = useCallback(async () => {
     if (!seedDomainName.trim()) return;
@@ -102,16 +97,12 @@ const DomainConfigPage = () => {
   }, [complianceText, form, intentsText, navigate, rulesText]);
 
   return (
-    <div className="ivr-admin-shell">
-      <div className="card">
-        <div className="card-header flex-wrap items-start md:items-center gap-3">
-          <div>
-            <h3 className="card-title">{pageTitle}</h3>
-            <div className="text-xs text-gray-600 mt-1">
-              Domain creation and configuration are in one page. Save will move to IVR test.
-            </div>
-          </div>
-          <div className="flex w-full gap-2 md:ms-auto md:w-auto">
+    <div className="container-fluid grid gap-5">
+      <IvrPageHeader
+        title={pageTitle}
+        description="Create a new IVR domain or update an existing configuration, prompts, and policy seed data."
+        actions={
+          <>
             <button className="btn btn-light" onClick={() => navigate('/domains')}>
               Back to Domains
             </button>
@@ -121,6 +112,19 @@ const DomainConfigPage = () => {
                 Go to Test
               </button>
             )}
+          </>
+        }
+      />
+      <div className="card border border-gray-200 shadow-none dark:border-coal-100">
+        <div className="card-header flex-wrap items-start gap-3 border-b border-gray-200 md:items-center dark:border-coal-100">
+          <div>
+            <h3 className="card-title">{pageTitle}</h3>
+            <div className="text-xs text-gray-600 mt-1">
+              Domain creation and configuration are in one page. Save will move to IVR test.
+            </div>
+          </div>
+          <div className="flex w-full gap-2 md:ms-auto md:w-auto text-xs text-gray-600">
+            {isCreateMode ? 'Seed a new domain configuration' : 'Edit and redeploy this domain'}
           </div>
         </div>
         <div className="card-body flex flex-col gap-4">
@@ -221,6 +225,16 @@ const DomainConfigPage = () => {
             />
           </label>
 
+          <label className="form-label flex-col">
+            Fallback Message
+            <textarea
+              className="textarea mt-1.5"
+              rows={2}
+              value={form.fallback_message}
+              onChange={(event) => setForm((prev) => ({ ...prev, fallback_message: event.target.value }))}
+            />
+          </label>
+
           <div className="grid xl:grid-cols-2 gap-4">
             <label className="form-label flex-col">
               Intents (one per line)
@@ -274,13 +288,7 @@ const DomainConfigPage = () => {
         </div>
       </div>
 
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-[100]">
-          <div className={`alert ${toast.kind === 'success' ? 'alert-success' : 'alert-danger'}`}>
-            {toast.text}
-          </div>
-        </div>
-      )}
+      <IvrToast toast={toast} />
     </div>
   );
 };

@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { PromptTemplatesService } from './prompt-templates.service';
 import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
+import { UpdatePromptTemplateDto } from './dto/update-prompt-template.dto';
 
 @Controller('domains/:domainId/prompts')
 export class PromptTemplatesController {
@@ -16,5 +17,20 @@ export class PromptTemplatesController {
   @Post()
   async create(@Param('domainId') domainId: string, @Body() payload: CreatePromptTemplateDto) {
     return this.service.create(domainId, payload);
+  }
+
+  @Patch(':promptTemplateId')
+  async update(
+    @Param('domainId') domainId: string,
+    @Param('promptTemplateId') promptTemplateId: string,
+    @Body() payload: UpdatePromptTemplateDto,
+  ) {
+    return this.service.update(domainId, promptTemplateId, payload);
+  }
+
+  @Delete(':promptTemplateId')
+  async remove(@Param('domainId') domainId: string, @Param('promptTemplateId') promptTemplateId: string) {
+    await this.service.remove(domainId, promptTemplateId);
+    return { success: true };
   }
 }

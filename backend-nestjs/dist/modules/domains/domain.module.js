@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const domain_intents_module_1 = require("../domain-intents/domain-intents.module");
 const domain_rules_module_1 = require("../domain-rules/domain-rules.module");
+const prompt_templates_module_1 = require("../prompt-templates/prompt-templates.module");
 const domain_entity_1 = require("./domain.entity");
 const domain_controller_1 = require("./domain.controller");
 const domain_service_1 = require("./domain.service");
@@ -19,7 +20,12 @@ let DomainModule = class DomainModule {
 exports.DomainModule = DomainModule;
 exports.DomainModule = DomainModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([domain_entity_1.DomainEntity]), domain_intents_module_1.DomainIntentsModule, domain_rules_module_1.DomainRulesModule],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([domain_entity_1.DomainEntity]),
+            domain_intents_module_1.DomainIntentsModule,
+            domain_rules_module_1.DomainRulesModule,
+            prompt_templates_module_1.PromptTemplatesModule,
+        ],
         controllers: [domain_controller_1.DomainController],
         providers: [domain_service_1.DomainService],
         exports: [domain_service_1.DomainService],

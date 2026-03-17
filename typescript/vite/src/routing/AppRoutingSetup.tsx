@@ -99,9 +99,9 @@ import {
 const AppRoutingSetup = (): ReactElement => {
   return (
     <Routes>
+      <Route path="/" element={<IvrEntryPage />} />
       {/* <Route element={<RequireAuth />}> */}
         <Route element={<Demo1Layout />}>
-          <Route path="/" element={<IvrEntryPage />} />
           <Route path="/ivr/overview" element={<OverviewPage />} />
           <Route path="/domains" element={<DomainsPage />} />
           <Route path="/domains/new" element={<DomainConfigPage />} />

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { KeenIcon } from '@/components';
 import { fetchDomains, removeDomain } from './api';
-import './ivr-admin.css';
+import { EmptyRow, IvrPageHeader, IvrToast, useToast } from './admin';
 import type { DomainConfig } from './types';
 
 type Toast = { kind: 'success' | 'danger'; text: string } | null;
@@ -12,6 +12,7 @@ const DomainsPage = () => {
   const [domains, setDomains] = useState<DomainConfig[]>([]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
+  useToast(toast, () => setToast(null));
 
   const loadDomains = useCallback(async () => {
     setBusy(true);
@@ -28,12 +29,6 @@ const DomainsPage = () => {
   useEffect(() => {
     void loadDomains();
   }, [loadDomains]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 3500);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   const onDelete = useCallback(
     async (domainId: string) => {
@@ -53,21 +48,32 @@ const DomainsPage = () => {
   );
 
   return (
-    <div className="ivr-admin-shell">
-      <div className="card">
-        <div className="card-header flex-wrap gap-3">
+    <div className="container-fluid grid gap-5">
+      <IvrPageHeader
+        title="Domains"
+        description="Manage configured IVR domains, open test sessions, and jump into domain workspaces."
+        actions={
+          <>
+            <button className="btn btn-light" onClick={() => void loadDomains()} disabled={busy}>
+              Reload
+            </button>
+            <button className="btn btn-primary" onClick={() => navigate('/domains/new')}>
+              <KeenIcon icon="plus" className="me-2" />
+              Create Domain
+            </button>
+          </>
+        }
+      />
+
+      <div className="card border border-gray-200 shadow-none dark:border-coal-100">
+        <div className="card-header flex-wrap gap-3 border-b border-gray-200 dark:border-coal-100">
           <div>
             <h3 className="card-title">Domains</h3>
             <div className="text-xs text-gray-600 mt-1">
               Manage domains here. Create/Edit and testing are in separate pages.
             </div>
           </div>
-          <div className="ms-auto">
-            <button className="btn btn-primary" onClick={() => navigate('/domains/new')}>
-              <KeenIcon icon="plus" className="me-2" />
-              Create Domain
-            </button>
-          </div>
+          <div className="ms-auto text-xs text-gray-600">{domains.length} configured domains</div>
         </div>
         <div className="card-table scrollable-x-auto pb-3">
           <table className="table table-auto table-border align-middle text-sm">
@@ -82,13 +88,7 @@ const DomainsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {domains.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center text-gray-600 py-8">
-                    {busy ? 'Loading domains...' : 'No domains found.'}
-                  </td>
-                </tr>
-              )}
+              {domains.length === 0 && <EmptyRow colSpan={6} text={busy ? 'Loading domains...' : 'No domains found.'} />}
               {domains.map((domain) => (
                 <tr key={domain.domain_id}>
                   <td>
@@ -143,13 +143,7 @@ const DomainsPage = () => {
         </div>
       </div>
 
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-[100]">
-          <div className={`alert ${toast.kind === 'success' ? 'alert-success' : 'alert-danger'}`}>
-            {toast.text}
-          </div>
-        </div>
-      )}
+      <IvrToast toast={toast} />
     </div>
   );
 };

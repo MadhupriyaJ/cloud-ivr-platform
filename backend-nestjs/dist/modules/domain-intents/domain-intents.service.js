@@ -32,6 +32,20 @@ let DomainIntentsService = class DomainIntentsService {
         const entity = this.repository.create({ ...payload, domainId });
         return this.repository.save(entity);
     }
+    async update(domainId, intentId, payload) {
+        const entity = await this.repository.findOne({ where: { domainId, intentId } });
+        if (!entity) {
+            throw new common_1.NotFoundException(`Intent '${intentId}' not found`);
+        }
+        Object.assign(entity, payload);
+        return this.repository.save(entity);
+    }
+    async remove(domainId, intentId) {
+        const result = await this.repository.delete({ domainId, intentId });
+        if (!result.affected) {
+            throw new common_1.NotFoundException(`Intent '${intentId}' not found`);
+        }
+    }
 };
 exports.DomainIntentsService = DomainIntentsService;
 exports.DomainIntentsService = DomainIntentsService = __decorate([

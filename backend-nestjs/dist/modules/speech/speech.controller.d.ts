@@ -6,4 +6,5 @@ export declare class SpeechController {
         token: string;
         region: string;
     }>;
+    issueAvatarRelayToken(): Promise<any>;
 }

@@ -16,6 +16,7 @@ export type DomainConfig = {
   voice: string;
   language: string;
   welcome_message: string;
+  fallback_message: string;
   intents: string[];
   rules: string[];
   compliance: string[];

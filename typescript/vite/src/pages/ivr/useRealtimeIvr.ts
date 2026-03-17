@@ -7,7 +7,7 @@ const SILENCE_RMS_THRESHOLD = 0.003;
 const SILENCE_KEEPALIVE_INTERVAL = 3;
 const ASSISTANT_PLAYBACK_GUARD_SECONDS = 0.06;
 const MAX_LOG_LINES = 300;
-const AVATAR_ENABLED = false;
+const AVATAR_ENABLED = true;
 
 function resolveWsUrl(domainId: string): string {
   const fromEnv = import.meta.env.VITE_BACKEND_WS_URL as string | undefined;
@@ -176,7 +176,7 @@ export function useRealtimeIvr() {
       speechPayload.region
     );
     const avatarVideoFormat = new speechsdk.AvatarVideoFormat();
-    const avatarConfig = new speechsdk.AvatarConfig('lisa', 'casual-sitting', avatarVideoFormat);
+    const avatarConfig = new speechsdk.AvatarConfig('meg', 'business', avatarVideoFormat);
     const avatarSynth = new speechsdk.AvatarSynthesizer(speechConfig, avatarConfig);
 
     const urls = relay.Urls ?? relay.urls ?? [];

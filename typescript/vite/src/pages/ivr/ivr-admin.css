@@ -10,23 +10,36 @@
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(circle at top left, rgba(20, 184, 166, 0.18), transparent 30%),
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 26%),
-    linear-gradient(180deg, #f8fbff 0%, #eef6ff 52%, #f7fafc 100%);
+    linear-gradient(180deg, var(--tw-light) 0%, var(--tw-light) 100%);
 }
+
+.dark .ivr-admin-shell::before {
+  background: linear-gradient(180deg, #111827 0%, #111827 100%);
+}
+
 
 .ivr-admin-shell .card {
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98));
-  box-shadow: 0 20px 50px -28px rgba(15, 23, 42, 0.28);
-  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: #ffffff;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
-.ivr-admin-shell .card-header {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.85));
+.dark .ivr-admin-shell .card {
+  background: #1f2937;
 }
+
+
+.ivr-admin-shell .card-header {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  background: #ffffff;
+}
+
+.dark .ivr-admin-shell .card-header {
+  background: #1f2937;
+}
+
 
 .ivr-admin-shell .table thead th {
   background: rgba(226, 232, 240, 0.45);
@@ -36,16 +49,34 @@
   text-transform: uppercase;
 }
 
+.dark .ivr-admin-shell .table thead th {
+  background: rgba(30, 41, 59, 0.72);
+  color: #94a3b8;
+}
+
 .ivr-admin-shell .table tbody tr:hover td {
   background: rgba(226, 232, 240, 0.2);
+}
+
+.dark .ivr-admin-shell .table tbody tr:hover td {
+  background: rgba(30, 41, 59, 0.44);
 }
 
 .ivr-admin-shell .input,
 .ivr-admin-shell .select,
 .ivr-admin-shell .textarea {
-  border-color: rgba(125, 211, 252, 0.45);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(15, 23, 42, 0.04);
+  border-color: rgba(226, 232, 240, 1);
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.dark .ivr-admin-shell .input,
+.dark .ivr-admin-shell .select,
+.dark .ivr-admin-shell .textarea {
+  border-color: rgba(39, 51, 67, 1);
+  background: #0000;
+  color: #e2e8f0;
+  box-shadow: none;
 }
 
 .ivr-admin-shell .input:focus,
@@ -55,71 +86,52 @@
   box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
 }
 
+.dark .ivr-admin-shell .input:focus,
+.dark .ivr-admin-shell .select:focus,
+.dark .ivr-admin-shell .textarea:focus {
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.16);
+}
+
 .ivr-admin-shell .btn-primary {
   border-color: transparent;
-  background: linear-gradient(135deg, #0f766e, #0ea5e9);
+  background: var(--tw-primary);
   color: #fff;
-  box-shadow: 0 16px 32px -20px rgba(14, 165, 233, 0.8);
+  box-shadow: none;
 }
 
 .ivr-admin-shell .btn-primary:hover,
 .ivr-admin-shell .btn-primary:focus {
-  background: linear-gradient(135deg, #115e59, #0284c7);
+  background: var(--tw-primary-active);
 }
 
 .ivr-admin-shell .btn-light {
-  border-color: rgba(148, 163, 184, 0.28);
-  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(226, 232, 240, 1);
+  background: #ffffff;
   color: #0f172a;
 }
 
 .ivr-admin-shell .btn-light:hover,
 .ivr-admin-shell .btn-light:focus {
   background: #fff;
-  color: #0369a1;
+  color: var(--tw-primary);
+}
+
+.dark .ivr-admin-shell .btn-light,
+.dark .btn-light {
+  border-color: rgba(71, 85, 105, 0.6);
+  background: #111827;
+  color: #e2e8f0;
+}
+
+.dark .ivr-admin-shell .btn-light:hover,
+.dark .ivr-admin-shell .btn-light:focus {
+  background: #1f2937;
+  color: #ffffff;
 }
 
 .ivr-admin-shell .badge-outline {
   border-width: 1px;
-}
-
-.ivr-admin-hero {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(125, 211, 252, 0.28);
-  background:
-    radial-gradient(circle at top right, rgba(191, 219, 254, 0.6), transparent 26%),
-    linear-gradient(135deg, #0f172a, #0f766e 58%, #0284c7);
-  color: #e2e8f0;
-}
-
-.ivr-admin-hero::after {
-  content: '';
-  position: absolute;
-  inset: auto -4rem -4rem auto;
-  width: 12rem;
-  height: 12rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.08);
-  filter: blur(8px);
-}
-
-.ivr-admin-hero .card-header {
-  position: relative;
-  z-index: 1;
-  border-bottom: 0;
-  background: transparent;
-}
-
-.ivr-admin-title {
-  color: #fff;
-  font-size: 1.4rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.ivr-admin-description {
-  color: rgba(226, 232, 240, 0.78);
 }
 
 .ivr-stat-card {
@@ -135,23 +147,23 @@
   width: 5rem;
   height: 5rem;
   border-radius: 9999px;
-  opacity: 0.18;
+  opacity: 0.1;
 }
 
 .ivr-stat-card.teal::before {
-  background: #14b8a6;
+  background: var(--tw-success);
 }
 
 .ivr-stat-card.blue::before {
-  background: #3b82f6;
+  background: var(--tw-primary);
 }
 
 .ivr-stat-card.amber::before {
-  background: #f59e0b;
+  background: var(--tw-warning);
 }
 
 .ivr-stat-card.rose::before {
-  background: #f43f5e;
+  background: var(--tw-danger);
 }
 
 .ivr-stat-chip {
@@ -166,26 +178,37 @@
 }
 
 .ivr-stat-chip.teal {
-  background: rgba(20, 184, 166, 0.12);
-  color: #0f766e;
+  background: color-mix(in srgb, var(--tw-success) 12%, transparent);
+  color: var(--tw-success);
 }
 
 .ivr-stat-chip.blue {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
+  background: color-mix(in srgb, var(--tw-primary) 12%, transparent);
+  color: var(--tw-primary);
 }
 
 .ivr-stat-chip.amber {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: color-mix(in srgb, var(--tw-warning) 12%, transparent);
+  color: var(--tw-warning);
 }
 
 .ivr-stat-chip.rose {
-  background: rgba(244, 63, 94, 0.12);
-  color: #be123c;
+  background: color-mix(in srgb, var(--tw-danger) 12%, transparent);
+  color: var(--tw-danger);
+}
+
+.dark .ivr-stat-card .text-gray-900,
+.dark .ivr-admin-shell .text-gray-900 {
+  color: #f8fafc !important;
+}
+
+.dark .ivr-stat-card .text-gray-600,
+.dark .ivr-admin-shell .text-gray-600,
+.dark .ivr-admin-shell .text-gray-800 {
+  color: #94a3b8 !important;
 }
 
 .ivr-floating-toast .alert {
-  border: 1px solid rgba(125, 211, 252, 0.22);
-  box-shadow: 0 20px 50px -28px rgba(15, 23, 42, 0.32);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: none;
 }
