@@ -1,0 +1,57 @@
+{
+  "domain_id": "custom-org",
+  "adapter_type": "generic",
+  "organization_name": "Custom Organization",
+  "api_base_url": "",
+  "api_key": "",
+  "auth_type": "none",
+  "auth_config": {},
+  "timeout_seconds": 30,
+  "max_retries": 3,
+  "custom_settings": {
+    "mode": "webhook",
+    "webhook_url": "https://your-org.example.com/ivr-webhook",
+    "custom_tools": [
+      {
+        "name": "check_order_status",
+        "description": "Check the status of a customer order.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {"type": "string", "description": "Order ID or reference number"},
+            "phone_number": {"type": "string"}
+          },
+          "required": ["order_id"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "request_callback",
+        "description": "Request a callback from a support agent.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "phone_number": {"type": "string"},
+            "preferred_time": {"type": "string", "description": "morning, afternoon, evening"},
+            "reason": {"type": "string"}
+          },
+          "required": ["phone_number"],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "intents": {
+    "order_status": {
+      "adapter": "generic",
+      "action": "check_order_status",
+      "description": "Check order status"
+    },
+    "callback": {
+      "adapter": "generic",
+      "action": "request_callback",
+      "description": "Request a callback"
+    }
+  },
+  "notes": "Example of webhook-based generic adapter. All tool calls are forwarded to webhook_url."
+}

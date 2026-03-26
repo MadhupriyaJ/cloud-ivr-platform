@@ -1,0 +1,45 @@
+{
+  "domain_id": "banking",
+  "adapter_type": "banking",
+  "organization_name": "ICICI Bank",
+  "api_base_url": "",
+  "api_key": "",
+  "auth_type": "none",
+  "auth_config": {},
+  "timeout_seconds": 15,
+  "max_retries": 2,
+  "custom_settings": {},
+  "intents": {
+    "balance_enquiry": {
+      "adapter": "banking",
+      "action": "get_account_balance",
+      "description": "Check account balance"
+    },
+    "card_block": {
+      "adapter": "banking",
+      "action": "block_card",
+      "description": "Block a lost or stolen card"
+    },
+    "mini_statement": {
+      "adapter": "banking",
+      "action": "get_mini_statement",
+      "description": "Get recent transactions"
+    },
+    "loan_status": {
+      "adapter": "banking",
+      "action": "get_loan_status",
+      "description": "Check loan EMI and status"
+    },
+    "fund_transfer": {
+      "adapter": "banking",
+      "action": "initiate_fund_transfer",
+      "description": "Transfer funds to another account"
+    },
+    "cheque_status": {
+      "adapter": "banking",
+      "action": "get_cheque_status",
+      "description": "Check cheque clearance status"
+    }
+  },
+  "notes": "Demo mode. Set api_base_url to connect to real Core Banking System."
+}

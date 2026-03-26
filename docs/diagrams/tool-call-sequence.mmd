@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant Caller
+    participant WebSocket as WebSocket Bridge
+    participant Realtime as OpenAI Realtime API
+    participant Guard as AI Intent Guard
+    participant Router as Integration Router
+    participant Adapter as Domain Adapter
+    participant Core as Core System API
+
+    Caller->>WebSocket: Audio stream
+    WebSocket->>Realtime: Forward audio
+    Realtime->>WebSocket: Transcription
+    WebSocket->>Guard: Classify intent
+    Guard->>Guard: Gen AI classification
+    Guard-->>WebSocket: In scope ✓
+
+    Realtime->>WebSocket: Tool call (e.g. get_balance)
+    WebSocket->>Router: execute_tool(domain, tool, args)
+    Router->>Router: Check circuit breaker
+    Router->>Adapter: execute_tool(tool, args)
+    Adapter->>Core: HTTP API call
+    Core-->>Adapter: JSON response
+    Adapter-->>Router: AdapterResponse
+    Router-->>WebSocket: Tool result
+    WebSocket->>Realtime: function_call_output
+    Realtime->>WebSocket: AI voice response
+    WebSocket->>Caller: Audio response
+
+    Note over Router: On failure: retry up to N times
+    Note over Router: After N failures: circuit breaker opens
+    Note over Guard: Falls back to keyword matching if AI unavailable

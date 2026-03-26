@@ -1,0 +1,35 @@
+{
+  "domain_id": "insurance",
+  "adapter_type": "insurance",
+  "organization_name": "Star Health Insurance",
+  "api_base_url": "",
+  "api_key": "",
+  "auth_type": "none",
+  "auth_config": {},
+  "timeout_seconds": 30,
+  "max_retries": 3,
+  "custom_settings": {},
+  "intents": {
+    "policy_details": {
+      "adapter": "insurance",
+      "action": "get_policy_details",
+      "description": "Get policy coverage and details"
+    },
+    "claim_status": {
+      "adapter": "insurance",
+      "action": "get_claim_status",
+      "description": "Check insurance claim status"
+    },
+    "premium_info": {
+      "adapter": "insurance",
+      "action": "get_premium_info",
+      "description": "Get premium payment details"
+    },
+    "renewal_status": {
+      "adapter": "insurance",
+      "action": "get_renewal_status",
+      "description": "Check policy renewal status"
+    }
+  },
+  "notes": "Demo mode. Set api_base_url to connect to real Insurance Management System."
+}

@@ -1,0 +1,70 @@
+graph TB
+    subgraph "Caller Layer"
+        A[Phone / Browser Caller]
+    end
+
+    subgraph "IVR Platform Core"
+        B[WebSocket Bridge<br>/ws?domain=banking]
+        C[Domain Config Loader]
+        D[AI Intent Guard<br>Gen AI Classification]
+        E[Integration Router<br>Retry + Circuit Breaker]
+        F[OpenAI Realtime API<br>Voice + Tools]
+        G[Escalation Manager]
+        H[Analytics Collector]
+    end
+
+    subgraph "Adapter Registry"
+        I[Hospital Adapter]
+        J[Banking Adapter]
+        K[Insurance Adapter]
+        L[Logistics Adapter]
+        M[Generic / Webhook Adapter]
+    end
+
+    subgraph "Core Systems"
+        N[Hospital Management System<br>HMS API]
+        O[Core Banking System<br>CBS API]
+        P[Insurance Management<br>Policy API]
+        Q[Logistics / Shipping<br>Tracking API]
+        R[Custom Webhook<br>Any REST API]
+    end
+
+    subgraph "Configuration"
+        S[JSON Config Files]
+        T[Database<br>DomainAdapterConfigs]
+        U[Domain Registry<br>domains.json]
+    end
+
+    A -->|Audio/WebSocket| B
+    B --> C
+    C --> S
+    C --> T
+    C --> U
+    B --> F
+    F -->|Transcription| D
+    D -->|In Scope| F
+    D -->|Out of Scope| G
+    F -->|Tool Call| E
+    E --> I
+    E --> J
+    E --> K
+    E --> L
+    E --> M
+    I --> N
+    J --> O
+    K --> P
+    L --> Q
+    M --> R
+    E -->|Failure| G
+    B --> H
+    G -->|SIP/Queue/Callback| A
+
+    style A fill:#4A90D9,color:#fff
+    style F fill:#10B981,color:#fff
+    style E fill:#F59E0B,color:#fff
+    style G fill:#EF4444,color:#fff
+    style I fill:#8B5CF6,color:#fff
+    style J fill:#8B5CF6,color:#fff
+    style K fill:#8B5CF6,color:#fff
+    style L fill:#8B5CF6,color:#fff
+    style M fill:#8B5CF6,color:#fff

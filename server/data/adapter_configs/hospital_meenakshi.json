@@ -1,0 +1,46 @@
+{
+  "domain_id": "hospital",
+  "adapter_type": "hospital",
+  "organization_name": "Meenakshi Mission Hospital",
+  "api_base_url": "",
+  "api_key": "",
+  "auth_type": "none",
+  "auth_config": {},
+  "timeout_seconds": 30,
+  "max_retries": 3,
+  "custom_settings": {},
+  "intents": {
+    "book_appointment": {
+      "adapter": "hospital",
+      "action": "book_appointment",
+      "description": "Book a doctor appointment",
+      "required_fields": ["patient_name", "phone_number", "visit_date", "slot_time"]
+    },
+    "get_appointment_status": {
+      "adapter": "hospital",
+      "action": "get_appointment_status",
+      "description": "Check appointment status"
+    },
+    "get_available_slots": {
+      "adapter": "hospital",
+      "action": "get_available_slots",
+      "description": "Check doctor availability and open slots"
+    },
+    "verify_patient": {
+      "adapter": "hospital",
+      "action": "verify_patient",
+      "description": "Verify patient identity"
+    },
+    "lab_reports": {
+      "adapter": "hospital",
+      "action": "get_lab_report_status",
+      "description": "Check lab report status"
+    },
+    "billing": {
+      "adapter": "hospital",
+      "action": "get_billing_info",
+      "description": "Get billing information"
+    }
+  },
+  "notes": "Local demo mode (no api_base_url). Set api_base_url to connect to real HMS."
+}
