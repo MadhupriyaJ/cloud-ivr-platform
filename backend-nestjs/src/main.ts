@@ -44,6 +44,8 @@ function buildAzureRealtimeUrl(): { url: string; headers: Record<string, string>
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const port = Number(process.env.PORT || 8010);
+  const host = process.env.HOST || '0.0.0.0';
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -224,7 +226,7 @@ async function bootstrap() {
     });
   });
 
-  await app.listen(8010);
+  await app.listen(port, host);
 }
 
 void bootstrap();

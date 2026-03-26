@@ -61,6 +61,10 @@ const DomainsPage = () => {
               <KeenIcon icon="plus" className="me-2" />
               Create Domain
             </button>
+            <button className="btn btn-success" onClick={() => navigate('/ivr/hospital')}>
+              <KeenIcon icon="hospital" className="me-2" />
+              Hospital Workspace
+            </button>
           </>
         }
       />

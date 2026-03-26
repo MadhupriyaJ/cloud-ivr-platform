@@ -1,18 +1,14 @@
 import { TypeOrmModuleAsyncOptions } from '@nestjs/typeorm';
-export declare const databaseConfig: (() => {
+type ParsedMssqlConfig = {
     host: string;
     port: number;
     username: string;
     password: string;
     database: string;
     encrypt: boolean;
-}) & import("@nestjs/config").ConfigFactoryKeyHost<{
-    host: string;
-    port: number;
-    username: string;
-    password: string;
-    database: string;
-    encrypt: boolean;
-}> & {
+    trustServerCertificate: boolean;
+};
+export declare const databaseConfig: (() => ParsedMssqlConfig) & import("@nestjs/config").ConfigFactoryKeyHost<ParsedMssqlConfig> & {
     asTypeOrmFactory(): TypeOrmModuleAsyncOptions;
 };
+export {};

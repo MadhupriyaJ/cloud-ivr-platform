@@ -37,6 +37,8 @@ function buildAzureRealtimeUrl() {
 }
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const port = Number(process.env.PORT || 8010);
+    const host = process.env.HOST || '0.0.0.0';
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new common_1.ValidationPipe({
         whitelist: true,
@@ -188,7 +190,7 @@ async function bootstrap() {
             await realtimeService.unregisterClient(clientId);
         });
     });
-    await app.listen(8010);
+    await app.listen(port, host);
 }
 void bootstrap();
 //# sourceMappingURL=main.js.map

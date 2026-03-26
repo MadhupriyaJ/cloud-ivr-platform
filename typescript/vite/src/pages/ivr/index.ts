@@ -4,3 +4,5 @@ export * from './DomainConfigPage';
 export * from './DomainTestPage';
 export * from './IvrEntryPage';
 export * from './AdminPages';
+export * from './HospitalWorkspacePage';
+export * from './N8nDomainBuilderPage';

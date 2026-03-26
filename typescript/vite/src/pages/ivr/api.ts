@@ -7,6 +7,13 @@ import type {
   DomainPayload,
   DomainRule,
   Escalation,
+  HospitalAppointment,
+  HospitalBilling,
+  HospitalDepartment,
+  HospitalDoctor,
+  HospitalLabReport,
+  HospitalPatient,
+  HospitalSchedule,
   PromptTemplate,
   ToolDefinition
 } from './types';
@@ -53,6 +60,14 @@ export async function generateDomain(
       domain_name: domainName,
       organization_name: organizationName || undefined
     })
+  });
+}
+
+export async function createDomain(payload: DomainPayload): Promise<DomainConfig> {
+  return fetchJson<DomainConfig>('/api/domains', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   });
 }
 
@@ -304,4 +319,192 @@ export async function deleteToolDefinition(domainUuid: string, toolId: string): 
     `/api/domains/${encodeURIComponent(domainUuid)}/tools/${encodeURIComponent(toolId)}`,
     { method: 'DELETE' }
   );
+}
+
+export async function bootstrapHospital(payload?: {
+  domainCode?: string;
+  displayName?: string;
+  organizationName?: string;
+}): Promise<{
+  seeded: boolean;
+  domainId: string;
+  domainCode: string;
+  departmentsCreated: number;
+  doctorsCreated: number;
+  schedulesCreated: number;
+}> {
+  return fetchJson('/api/hospital/bootstrap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload ?? {})
+  });
+}
+
+export async function fetchHospitalDepartments(): Promise<HospitalDepartment[]> {
+  return fetchItems<HospitalDepartment>('/api/hospital/departments');
+}
+
+export async function fetchHospitalDoctors(departmentId?: string): Promise<HospitalDoctor[]> {
+  const suffix = departmentId ? `?departmentId=${encodeURIComponent(departmentId)}` : '';
+  return fetchItems<HospitalDoctor>(`/api/hospital/doctors${suffix}`);
+}
+
+export async function fetchAvailableHospitalDoctors(args?: {
+  departmentId?: string;
+  date?: string;
+}): Promise<HospitalDoctor[]> {
+  const params = new URLSearchParams();
+  if (args?.departmentId) params.set('departmentId', args.departmentId);
+  if (args?.date) params.set('date', args.date);
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return fetchItems<HospitalDoctor>(`/api/hospital/doctors/available${suffix}`);
+}
+
+export async function fetchHospitalDoctorSlots(
+  doctorId: string,
+  date?: string
+): Promise<HospitalSchedule[]> {
+  const suffix = date ? `?date=${encodeURIComponent(date)}` : '';
+  return fetchItems<HospitalSchedule>(
+    `/api/hospital/doctors/${encodeURIComponent(doctorId)}/slots${suffix}`
+  );
+}
+
+export async function createHospitalPatient(payload: {
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  addressLine?: string;
+  emergencyContact?: string;
+}): Promise<HospitalPatient> {
+  return fetchJson('/api/hospital/patients', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function lookupHospitalPatient(args: {
+  patientCode?: string;
+  phone?: string;
+}): Promise<HospitalPatient | null> {
+  const params = new URLSearchParams();
+  if (args.patientCode) params.set('patientCode', args.patientCode);
+  if (args.phone) params.set('phone', args.phone);
+  return fetchJson<HospitalPatient | null>(`/api/hospital/patients/lookup?${params.toString()}`);
+}
+
+export async function createHospitalAppointment(payload: {
+  patientId?: string;
+  patientCode?: string;
+  phoneNumber?: string;
+  doctorId: string;
+  departmentId: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  reasonForVisit?: string;
+  conversationId?: string;
+  patientName?: string;
+}): Promise<HospitalAppointment> {
+  return fetchJson('/api/hospital/appointments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function verifyHospitalAppointment(args: {
+  patientCode?: string;
+  phone?: string;
+}): Promise<HospitalAppointment | null> {
+  const params = new URLSearchParams();
+  if (args.patientCode) params.set('patientCode', args.patientCode);
+  if (args.phone) params.set('phone', args.phone);
+  return fetchJson<HospitalAppointment | null>(
+    `/api/hospital/appointments/verify?${params.toString()}`
+  );
+}
+
+export async function fetchHospitalBilling(args: {
+  patientCode?: string;
+  phone?: string;
+}): Promise<HospitalBilling[]> {
+  const params = new URLSearchParams();
+  if (args.patientCode) params.set('patientCode', args.patientCode);
+  if (args.phone) params.set('phone', args.phone);
+  return fetchItems<HospitalBilling>(`/api/hospital/billing?${params.toString()}`);
+}
+
+export async function fetchHospitalLabReports(args: {
+  patientCode?: string;
+  phone?: string;
+}): Promise<HospitalLabReport[]> {
+  const params = new URLSearchParams();
+  if (args.patientCode) params.set('patientCode', args.patientCode);
+  if (args.phone) params.set('phone', args.phone);
+  return fetchItems<HospitalLabReport>(`/api/hospital/lab-reports?${params.toString()}`);
+}
+
+export async function fetchHospitalAppointments(args?: {
+  departmentId?: string;
+  date?: string;
+  status?: string;
+  patientCode?: string;
+  phone?: string;
+}): Promise<HospitalAppointment[]> {
+  const params = new URLSearchParams();
+  if (args?.departmentId) params.set('departmentId', args.departmentId);
+  if (args?.date) params.set('date', args.date);
+  if (args?.status) params.set('status', args.status);
+  if (args?.patientCode) params.set('patientCode', args.patientCode);
+  if (args?.phone) params.set('phone', args.phone);
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return fetchItems<HospitalAppointment>(`/api/hospital/appointments${suffix}`);
+}
+
+export async function rescheduleHospitalAppointment(
+  appointmentId: string,
+  payload: { appointmentDate: string; appointmentTime: string }
+): Promise<HospitalAppointment> {
+  return fetchJson(`/api/hospital/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function cancelHospitalAppointment(
+  appointmentId: string
+): Promise<HospitalAppointment> {
+  return fetchJson(`/api/hospital/appointments/${encodeURIComponent(appointmentId)}/cancel`, {
+    method: 'PUT'
+  });
+}
+
+export async function createConversation(payload: {
+  domainId: string;
+  channelType: string;
+  customerIdentifier?: string;
+}): Promise<Conversation> {
+  return fetchJson('/api/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createConversationMessage(payload: {
+  conversationId: string;
+  speakerType: string;
+  messageType: string;
+  messageText: string;
+  sequenceNo: number;
+}): Promise<ConversationMessage> {
+  return fetchJson('/api/conversations/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
 }

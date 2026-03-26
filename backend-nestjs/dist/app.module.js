@@ -23,6 +23,7 @@ const prompt_templates_module_1 = require("./modules/prompt-templates/prompt-tem
 const realtime_module_1 = require("./modules/realtime/realtime.module");
 const speech_module_1 = require("./modules/speech/speech.module");
 const tool_definitions_module_1 = require("./modules/tool-definitions/tool-definitions.module");
+const hospital_module_1 = require("./modules/hospital/hospital.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -31,6 +32,7 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
+                envFilePath: ['.env'],
                 load: [database_config_1.databaseConfig, azure_config_1.azureConfig],
             }),
             typeorm_1.TypeOrmModule.forRootAsync(database_config_1.databaseConfig.asTypeOrmFactory()),
@@ -44,6 +46,7 @@ exports.AppModule = AppModule = __decorate([
             realtime_module_1.RealtimeModule,
             speech_module_1.SpeechModule,
             tool_definitions_module_1.ToolDefinitionsModule,
+            hospital_module_1.HospitalModule,
         ],
         controllers: [app_controller_1.AppController],
     })

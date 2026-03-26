@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { KeenIcon } from '@/components';
+import {
+  N8N_IVR_BUILDER_ENABLED,
+  N8N_IVR_BUILDER_PATH,
+  N8N_IVR_BUILDER_TITLE
+} from '@/config/ivr-builder.config';
 import { fetchDomains } from './api';
 import { LAST_TESTED_DOMAIN_KEY } from './DomainTestPage';
 
@@ -76,6 +81,15 @@ const IvrEntryPage = () => {
                 <KeenIcon icon="plus" className="me-2" />
                 Create Domain
               </Link>
+              {N8N_IVR_BUILDER_ENABLED && (
+                <Link
+                  to={N8N_IVR_BUILDER_PATH}
+                  className="btn btn-outline btn-lg border-white/30 text-white hover:bg-white/10"
+                >
+                  <KeenIcon icon="technology-4" className="me-2" />
+                  {N8N_IVR_BUILDER_TITLE}
+                </Link>
+              )}
               {loaded && fallbackDomain && (
                 <Link
                   to={`/domains/${fallbackDomain}/test`}
@@ -87,7 +101,7 @@ const IvrEntryPage = () => {
               )}
             </div>
 
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-sm">
                 <div className="text-sm font-medium text-white/70">Module</div>
                 <div className="mt-2 text-lg font-semibold text-white">Domain Studio</div>
@@ -96,6 +110,12 @@ const IvrEntryPage = () => {
                 <div className="text-sm font-medium text-white/70">Module</div>
                 <div className="mt-2 text-lg font-semibold text-white">Realtime Testing</div>
               </div>
+              {N8N_IVR_BUILDER_ENABLED && (
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-sm">
+                  <div className="text-sm font-medium text-white/70">Module</div>
+                  <div className="mt-2 text-lg font-semibold text-white">{N8N_IVR_BUILDER_TITLE}</div>
+                </div>
+              )}
               <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-sm">
                 <div className="text-sm font-medium text-white/70">Module</div>
                 <div className="mt-2 text-lg font-semibold text-white">Escalation Ops</div>

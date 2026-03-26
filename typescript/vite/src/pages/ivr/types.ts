@@ -114,3 +114,100 @@ export type ToolDefinition = {
   isActive: boolean;
   createdAt: string;
 };
+
+export type HospitalDepartment = {
+  departmentId: string;
+  domainId: string;
+  departmentCode: string;
+  departmentName: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HospitalDoctor = {
+  doctorId: string;
+  doctorCode?: string;
+  doctorName: string;
+  specialization?: string | null;
+  availabilityStatus: string;
+  consultationFee?: string | null;
+  departmentId: string;
+  departmentName: string;
+  scheduleId?: string;
+  scheduleDate?: string;
+  startTime?: string;
+  endTime?: string;
+  availableSlots?: number;
+};
+
+export type HospitalSchedule = {
+  scheduleId: string;
+  doctorId: string;
+  scheduleDate: string;
+  startTime: string;
+  endTime: string;
+  maxSlots: number;
+  availableSlots: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HospitalPatient = {
+  patientId: string;
+  patientCode: string;
+  fullName: string;
+  phoneNumber: string;
+  email?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  addressLine?: string | null;
+  emergencyContact?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HospitalAppointment = {
+  appointmentId: string;
+  appointmentCode: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  appointmentStatus: string;
+  reasonForVisit?: string | null;
+  bookedChannel: string;
+  patientId: string;
+  patientCode: string;
+  patientName: string;
+  phoneNumber: string;
+  doctorId: string;
+  doctorName: string;
+  departmentId: string;
+  departmentName: string;
+};
+
+export type HospitalBilling = {
+  billingId: string;
+  patientId: string;
+  appointmentId?: string | null;
+  invoiceNumber: string;
+  totalAmount: string;
+  paidAmount: string;
+  billingStatus: string;
+  dueDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HospitalLabReport = {
+  labReportId: string;
+  patientId: string;
+  appointmentId?: string | null;
+  reportNumber: string;
+  testName: string;
+  reportStatus: string;
+  resultSummary?: string | null;
+  reportDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};

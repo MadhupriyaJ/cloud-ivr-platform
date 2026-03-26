@@ -82,9 +82,12 @@ import {
   EscalationsPage,
   IntentsRulesPage,
   IvrEntryPage,
+  N8nDomainBuilderPage,
   OverviewPage,
-  PromptsToolsPage
+  PromptsToolsPage,
+  HospitalWorkspacePage
 } from '@/pages/ivr';
+import { N8N_IVR_BUILDER_ENABLED, N8N_IVR_BUILDER_PATH } from '@/config/ivr-builder.config';
 
 import { AuthPage } from '@/auth';
 import { RequireAuth } from '@/auth/RequireAuth';
@@ -113,6 +116,10 @@ const AppRoutingSetup = (): ReactElement => {
           <Route path="/ivr/escalations" element={<EscalationsPage />} />
           <Route path="/ivr/agents" element={<AgentsPage />} />
           <Route path="/ivr/prompts-tools" element={<PromptsToolsPage />} />
+          <Route path="/ivr/hospital" element={<HospitalWorkspacePage />} />
+          {N8N_IVR_BUILDER_ENABLED && (
+            <Route path={N8N_IVR_BUILDER_PATH} element={<N8nDomainBuilderPage />} />
+          )}
           <Route path="/ivr/test" element={<DomainTestPage />} />
           <Route path="/ivr/studio" element={<Navigate to="/domains" replace />} />
           <Route path="/dashboard/default" element={<DefaultPage />} />

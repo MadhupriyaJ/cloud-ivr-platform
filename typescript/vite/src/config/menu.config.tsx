@@ -1,8 +1,9 @@
 import { type TMenuConfig } from '@/components/menu';
+import { N8N_IVR_BUILDER_ENABLED, N8N_IVR_BUILDER_PATH, N8N_IVR_BUILDER_TITLE } from '@/config/ivr-builder.config';
 
 export const MENU_SIDEBAR: TMenuConfig = [
   {
-    title: 'IVR Studio',
+    title: 'Common IVR',
     icon: 'phone',
     children: [
       {
@@ -34,12 +35,30 @@ export const MENU_SIDEBAR: TMenuConfig = [
         path: '/ivr/agents'
       },
       {
+        title: 'IVR Test (Last)',
+        path: '/ivr/test'
+      },
+      {
         title: 'New Domain',
         path: '/domains/new'
       },
+      ...(N8N_IVR_BUILDER_ENABLED
+        ? [
+            {
+              title: N8N_IVR_BUILDER_TITLE,
+              path: N8N_IVR_BUILDER_PATH
+            }
+          ]
+        : [])
+    ]
+  },
+  {
+    title: 'Domain Workspaces',
+    icon: 'component',
+    children: [
       {
-        title: 'IVR Test (Last)',
-        path: '/ivr/test'
+        title: 'Hospital Workspace',
+        path: '/ivr/hospital'
       }
     ]
   },

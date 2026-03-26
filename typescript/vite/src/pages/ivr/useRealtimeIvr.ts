@@ -51,6 +51,8 @@ export function useRealtimeIvr() {
   const avatarSpeakQueueRef = useRef<Promise<void>>(Promise.resolve());
   const avatarReadyRef = useRef(false);
   const avatarHasAudioTrackRef = useRef(false);
+  const scriptedHandlerRef = useRef<((utterance: string) => Promise<string | void>) | null>(null);
+  const scriptedSessionRef = useRef(false);
 
   const appendLog = useCallback((line: string) => {
     setLogs((prev) => [...prev, line].slice(-MAX_LOG_LINES));
@@ -119,6 +121,20 @@ export function useRealtimeIvr() {
       const text = (event?.result?.text || '').trim();
       if (!text) return;
       finalizeLiveLog('You', text);
+      if (scriptedSessionRef.current && scriptedHandlerRef.current) {
+        void scriptedHandlerRef.current(text)
+          .then((responseText) => {
+            const finalText = (responseText || '').trim();
+            if (!finalText) return;
+            finalizeLiveLog('AI', finalText);
+            if (avatarReadyRef.current) {
+              enqueueAvatarSpeech(finalText);
+            }
+          })
+          .catch((error) => {
+            appendLog(`Scripted IVR handler failed: ${String(error)}`);
+          });
+      }
     };
 
     recognizer.canceled = (_sender: unknown, event: any) => {
@@ -415,6 +431,62 @@ export function useRealtimeIvr() {
     ]
   );
 
+  const startScriptedSession = useCallback(
+    async (
+      sessionLabel: string,
+      handler: (utterance: string) => Promise<string | void>,
+      initialPrompt?: string
+    ) => {
+      if (status !== 'idle') {
+        appendLog('Session is already running.');
+        return;
+      }
+
+      scriptedSessionRef.current = true;
+      scriptedHandlerRef.current = handler;
+      setStatus('connecting');
+
+      try {
+        await startHumanTranscription();
+        if (AVATAR_ENABLED) {
+          try {
+            await startAvatar();
+          } catch (error) {
+            appendLog(`Avatar init failed: ${String(error)}`);
+            setAvatarReady(false);
+          }
+        } else {
+          setAvatarReady(false);
+        }
+
+        setStatus('connected');
+        appendLog(`Connected to guided domain '${sessionLabel}'. Mic + transcription started.`);
+        const welcomeText = (initialPrompt || '').trim();
+        if (welcomeText) {
+          finalizeLiveLog('AI', welcomeText);
+          if (avatarReadyRef.current) {
+            enqueueAvatarSpeech(welcomeText);
+          }
+        }
+      } catch (error) {
+        appendLog(`Scripted session init failed: ${String(error)}`);
+        scriptedSessionRef.current = false;
+        scriptedHandlerRef.current = null;
+        stopHumanTranscription();
+        setStatus('idle');
+      }
+    },
+    [
+      appendLog,
+      enqueueAvatarSpeech,
+      finalizeLiveLog,
+      startAvatar,
+      startHumanTranscription,
+      status,
+      stopHumanTranscription
+    ]
+  );
+
   const stop = useCallback(() => {
     processorNodeRef.current?.disconnect();
     sourceNodeRef.current?.disconnect();
@@ -434,6 +506,8 @@ export function useRealtimeIvr() {
     playCursorRef.current = 0;
     silentFrameCountRef.current = 0;
     aiLiveTextRef.current = '';
+    scriptedSessionRef.current = false;
+    scriptedHandlerRef.current = null;
     setStatus('idle');
     appendLog('Stopped.');
   }, [appendLog, stopAvatar, stopHumanTranscription]);
@@ -446,6 +520,7 @@ export function useRealtimeIvr() {
     avatarReady,
     setAvatarVideoElement,
     start,
+    startScriptedSession,
     stop,
     clearLogs
   };

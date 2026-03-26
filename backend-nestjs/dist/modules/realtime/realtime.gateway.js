@@ -58,7 +58,7 @@ exports.RealtimeGateway = RealtimeGateway = __decorate([
     (0, websockets_1.WebSocketGateway)({
         namespace: '/ws/realtime',
         cors: {
-            origin: ['http://localhost:5173'],
+            origin: true,
             credentials: true,
         },
     }),

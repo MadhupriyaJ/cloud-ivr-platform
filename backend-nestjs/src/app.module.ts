@@ -14,11 +14,13 @@ import { PromptTemplatesModule } from './modules/prompt-templates/prompt-templat
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SpeechModule } from './modules/speech/speech.module';
 import { ToolDefinitionsModule } from './modules/tool-definitions/tool-definitions.module';
+import { HospitalModule } from './modules/hospital/hospital.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env'],
       load: [databaseConfig, azureConfig],
     }),
     TypeOrmModule.forRootAsync(databaseConfig.asTypeOrmFactory()),
@@ -32,6 +34,7 @@ import { ToolDefinitionsModule } from './modules/tool-definitions/tool-definitio
     RealtimeModule,
     SpeechModule,
     ToolDefinitionsModule,
+    HospitalModule,
   ],
   controllers: [AppController],
 })
