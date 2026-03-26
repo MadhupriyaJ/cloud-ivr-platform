@@ -17,14 +17,18 @@ import {
   deletePromptTemplate,
   deleteToolDefinition,
   fetchAgents,
+  fetchAnalyticsOverview,
   fetchConversationMessages,
   fetchConversations,
+  fetchConversationTrends,
   fetchDomain,
+  fetchDomainDistribution,
   fetchDomainIntents,
   fetchDomains,
   fetchDomainRules,
   fetchEscalations,
   fetchPromptTemplates,
+  fetchSystemHealth,
   fetchToolDefinitions,
   updateDomainIntent,
   updateDomainRule,
@@ -124,12 +128,24 @@ function getReadableTranscriptText(message: ConversationMessage): string {
   return text || 'No transcript text available.';
 }
 
+type AnalyticsOverviewData = {
+  domains: { total: number; active: number };
+  conversations: { total: number; live: number; escalated: number; avgDurationSec: number };
+  agents: { total: number; available: number; busy: number };
+  escalations: { total: number; open: number; closed: number };
+  conversationsByChannel: { channel: string; count: number }[];
+  conversationsByStatus: { status: string; count: number }[];
+};
+type ConversationTrendItem = { date: string; count: number };
+type DomainDistItem = { domainCode: string; displayName: string; count: number };
+
 const OverviewPage = () => {
   const navigate = useNavigate();
   const [domains, setDomains] = useState<DomainConfig[]>([]);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [escalations, setEscalations] = useState<Escalation[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsOverviewData | null>(null);
+  const [trends, setTrends] = useState<ConversationTrendItem[]>([]);
+  const [domainDist, setDomainDist] = useState<DomainDistItem[]>([]);
+  const [health, setHealth] = useState<{ status: string; database: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
@@ -138,16 +154,18 @@ const OverviewPage = () => {
   const load = useCallback(async () => {
     setBusy(true);
     try {
-      const [domainItems, conversationItems, escalationItems, agentItems] = await Promise.all([
+      const [domainItems, analyticsData, trendItems, distItems, healthData] = await Promise.all([
         fetchDomains(),
-        fetchConversations(),
-        fetchEscalations(),
-        fetchAgents()
+        fetchAnalyticsOverview(),
+        fetchConversationTrends(),
+        fetchDomainDistribution(),
+        fetchSystemHealth()
       ]);
       setDomains(domainItems);
-      setConversations(conversationItems);
-      setEscalations(escalationItems);
-      setAgents(agentItems);
+      setAnalytics(analyticsData);
+      setTrends(trendItems);
+      setDomainDist(distItems);
+      setHealth(healthData);
     } catch (error) {
       setToast({ kind: 'danger', text: `Failed to load overview: ${getErrorText(error)}` });
     } finally {
@@ -159,55 +177,70 @@ const OverviewPage = () => {
     void load();
   }, [load]);
 
-  const liveConversations = conversations.filter((item) => item.sessionStatus === 'started').length;
-  const openEscalations = escalations.filter((item) => !item.closedAt).length;
-  const closedEscalations = escalations.filter((item) => item.closedAt).length;
-  const activeDomains = domains.filter((item) => item.active).length;
-  const availableAgents = agents.filter((item) => item.isActive).length;
-  const escalatedSessions = conversations.filter((item) => item.escalatedToAgent).length;
-  const chartMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthlyCalls = useMemo(() => {
-    const counts = new Array(12).fill(0);
-    conversations.forEach((item) => {
-      const date = new Date(item.startedAt);
-      if (!Number.isNaN(date.getTime())) counts[date.getMonth()] += 1;
-    });
-    return counts;
-  }, [conversations]);
-  const chartOptions: ApexOptions = useMemo(
+  const activeDomains = analytics?.domains.active ?? 0;
+  const liveConversations = analytics?.conversations.live ?? 0;
+  const openEscalations = analytics?.escalations.open ?? 0;
+  const availableAgents = analytics?.agents.available ?? 0;
+  const totalConversations = analytics?.conversations.total ?? 0;
+  const escalatedSessions = analytics?.conversations.escalated ?? 0;
+  const closedEscalations = analytics?.escalations.closed ?? 0;
+  const channelData = analytics?.conversationsByChannel ?? [];
+  const statusData = analytics?.conversationsByStatus ?? [];
+
+  const trendChartOptions: ApexOptions = useMemo(
     () => ({
-      chart: { type: 'area', height: 250, toolbar: { show: false } },
+      chart: { type: 'area', height: 250, toolbar: { show: false }, sparkline: { enabled: false } },
       dataLabels: { enabled: false },
       legend: { show: false },
       stroke: { curve: 'smooth', width: 3, colors: ['var(--tw-primary)'] },
-      fill: { gradient: { opacityFrom: 0.22, opacityTo: 0.02 } },
+      fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.28, opacityTo: 0.04, stops: [0, 90, 100] } },
       xaxis: {
-        categories: chartMonths,
+        categories: trends.map((t) => t.date.slice(5)),
         axisBorder: { show: false },
         axisTicks: { show: false },
-        labels: { style: { colors: 'var(--tw-gray-500)', fontSize: '12px' } }
+        labels: { style: { colors: 'var(--tw-gray-500)', fontSize: '11px' }, rotate: -45, rotateAlways: trends.length > 10 }
       },
-      yaxis: {
-        labels: { style: { colors: 'var(--tw-gray-500)', fontSize: '12px' } }
-      },
-      grid: {
-        borderColor: 'var(--tw-gray-200)',
-        strokeDashArray: 5,
-        yaxis: { lines: { show: true } },
-        xaxis: { lines: { show: false } }
-      },
+      yaxis: { labels: { style: { colors: 'var(--tw-gray-500)', fontSize: '12px' } } },
+      grid: { borderColor: 'var(--tw-gray-200)', strokeDashArray: 5, yaxis: { lines: { show: true } }, xaxis: { lines: { show: false } } },
       tooltip: { enabled: true }
     }),
-    []
+    [trends]
   );
+
+  const channelChartOptions: ApexOptions = useMemo(
+    () => ({
+      chart: { type: 'donut', height: 220 },
+      labels: channelData.map((c) => c.channel),
+      colors: ['var(--tw-primary)', 'var(--tw-success)', 'var(--tw-warning)', 'var(--tw-info)', 'var(--tw-danger)'],
+      legend: { position: 'bottom', fontSize: '12px' },
+      dataLabels: { enabled: true, style: { fontSize: '11px' } },
+      plotOptions: { pie: { donut: { size: '55%' } } }
+    }),
+    [channelData]
+  );
+
+  const domainBarOptions: ApexOptions = useMemo(
+    () => ({
+      chart: { type: 'bar', height: 220, toolbar: { show: false } },
+      plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '60%' } },
+      dataLabels: { enabled: true, style: { fontSize: '11px' } },
+      xaxis: { categories: domainDist.map((d) => d.displayName), labels: { style: { colors: 'var(--tw-gray-500)', fontSize: '11px' } } },
+      yaxis: { labels: { style: { colors: 'var(--tw-gray-700)', fontSize: '12px' } } },
+      colors: ['var(--tw-primary)'],
+      grid: { borderColor: 'var(--tw-gray-200)', strokeDashArray: 5 },
+      tooltip: { enabled: true }
+    }),
+    [domainDist]
+  );
+
   const topCards = [
-    { icon: 'abstract-26', value: `${activeDomains}`, desc: 'Active domains', color: 'text-primary' },
-    { icon: 'phone', value: `${liveConversations}`, desc: 'Live calls', color: 'text-success' },
-    { icon: 'delivery-24', value: `${openEscalations}`, desc: 'Open escalations', color: 'text-warning' },
-    { icon: 'people', value: `${availableAgents}`, desc: 'Ready agents', color: 'text-info' }
+    { icon: 'abstract-26', value: `${activeDomains}`, desc: 'Active Domains', color: 'text-primary' },
+    { icon: 'phone', value: `${liveConversations}`, desc: 'Live Calls', color: 'text-success' },
+    { icon: 'delivery-24', value: `${openEscalations}`, desc: 'Open Escalations', color: 'text-warning' },
+    { icon: 'people', value: `${availableAgents}`, desc: 'Ready Agents', color: 'text-info' }
   ];
   const summaryRows = [
-    { icon: 'phone', text: 'Voice sessions', total: conversations.length, stats: liveConversations, increase: true },
+    { icon: 'phone', text: 'Voice sessions', total: totalConversations, stats: liveConversations, increase: true },
     { icon: 'security-user', text: 'Escalation cases', total: escalatedSessions, stats: openEscalations, increase: false },
     { icon: 'user-tick', text: 'Resolved handoffs', total: closedEscalations, stats: availableAgents, increase: true }
   ];
@@ -236,6 +269,12 @@ const OverviewPage = () => {
           description="Central hub for IVR operations, live calls, and domain activity."
           actions={
             <>
+              {health && (
+                <span className={`badge badge-sm ${health.status === 'healthy' ? 'badge-success badge-outline' : 'badge-danger badge-outline'}`}>
+                  <KeenIcon icon="check-circle" className="me-1" />
+                  {health.database === 'connected' ? 'DB Connected' : 'DB Disconnected'}
+                </span>
+              )}
               <button className="btn btn-sm btn-light" onClick={() => void load()} disabled={busy}>
                 Reload
               </button>
@@ -247,15 +286,16 @@ const OverviewPage = () => {
           }
         />
 
+        {/* Top stat cards */}
         <div className="grid items-stretch gap-y-5 lg:grid-cols-3 lg:gap-7.5">
           <div className="lg:col-span-1">
             <div className="grid h-full grid-cols-2 gap-5 lg:gap-7.5">
               {topCards.map((item) => (
                 <div
                   key={item.desc}
-                  className="card ivr-overview-stat-bg h-full flex-col justify-between gap-6 border border-gray-200 bg-cover bg-[right_top_-1.7rem] bg-no-repeat shadow-none rtl:bg-[left_top_-1.7rem] dark:border-coal-100 "
+                  className="card ivr-overview-stat-bg h-full flex-col justify-between gap-6 border border-gray-200 bg-cover bg-[right_top_-1.7rem] bg-no-repeat shadow-none rtl:bg-[left_top_-1.7rem] dark:border-coal-100"
                 >
-                  <div className={`mt-4 ms-5 flex size-11 items-center justify-center rounded-lg bg-light  ${item.color}`}>
+                  <div className={`mt-4 ms-5 flex size-11 items-center justify-center rounded-lg bg-light ${item.color}`}>
                     <KeenIcon icon={item.icon} className="text-xl" />
                   </div>
                   <div className="flex flex-col gap-1 px-5 pb-4">
@@ -268,7 +308,7 @@ const OverviewPage = () => {
           </div>
 
           <div className="lg:col-span-2">
-            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100">
               <div className="card-body ivr-overview-callout-bg bg-[length:80%] bg-no-repeat p-10 [background-position:175%_25%] rtl:[background-position:-70%_25%]">
                 <div className="flex flex-col justify-center gap-4">
                   <div className="flex -space-x-2">
@@ -303,14 +343,12 @@ const OverviewPage = () => {
           </div>
         </div>
 
+        {/* Row 2: Highlights + Conversation Trend (from real analytics API) */}
         <div className="grid items-stretch gap-5 lg:grid-cols-3 lg:gap-7.5">
           <div className="lg:col-span-1">
-            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100">
               <div className="card-header border-b border-gray-200 dark:border-coal-100">
                 <h3 className="card-title">Highlights</h3>
-                <button className="btn btn-sm btn-icon btn-light btn-clear">
-                  <KeenIcon icon="dots-vertical" />
-                </button>
               </div>
               <div className="card-body flex flex-col gap-4 p-5 lg:p-7.5 lg:pt-4">
                 <div className="flex flex-col gap-0.5">
@@ -319,31 +357,31 @@ const OverviewPage = () => {
                   </span>
                   <div className="flex items-center gap-2.5">
                     <span className="text-3xl font-semibold text-gray-900 dark:text-white">
-                      {conversations.length}
+                      {totalConversations}
                     </span>
                     <span className="badge badge-outline badge-success badge-sm">
                       {availableAgents} active agents
                     </span>
                   </div>
                 </div>
+                {/* Status bar */}
                 <div className="mb-1.5 flex items-center gap-1">
-                  <div className="h-2 w-full max-w-[55%] rounded-sm bg-success"></div>
-                  <div className="h-2 w-full max-w-[28%] rounded-sm bg-primary"></div>
-                  <div className="h-2 w-full max-w-[17%] rounded-sm bg-warning"></div>
+                  {statusData.map((s, i) => {
+                    const pct = totalConversations > 0 ? Math.max(5, Math.round((s.count / totalConversations) * 100)) : 0;
+                    const colors = ['bg-success', 'bg-primary', 'bg-warning', 'bg-danger', 'bg-info'];
+                    return <div key={s.status} className={`h-2 rounded-sm ${colors[i % colors.length]}`} style={{ width: `${pct}%` }} />;
+                  })}
                 </div>
                 <div className="mb-1 flex items-center flex-wrap gap-4">
-                  <div className="flex items-center gap-1.5">
-                    <span className="badge badge-dot size-2 badge-success"></span>
-                    <span className="text-sm text-gray-800 dark:text-gray-300">Completed</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="badge badge-dot size-2 badge-primary"></span>
-                    <span className="text-sm text-gray-800 dark:text-gray-300">Live</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="badge badge-dot size-2 badge-warning"></span>
-                    <span className="text-sm text-gray-800 dark:text-gray-300">Escalated</span>
-                  </div>
+                  {statusData.map((s, i) => {
+                    const dotColors = ['badge-success', 'badge-primary', 'badge-warning', 'badge-danger', 'badge-info'];
+                    return (
+                      <div key={s.status} className="flex items-center gap-1.5">
+                        <span className={`badge badge-dot size-2 ${dotColors[i % dotColors.length]}`}></span>
+                        <span className="text-sm text-gray-800 dark:text-gray-300">{s.status} ({s.count})</span>
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="border-b border-gray-300 dark:border-coal-100"></div>
                 <div className="grid gap-3">
@@ -373,42 +411,75 @@ const OverviewPage = () => {
           </div>
 
           <div className="lg:col-span-2">
-            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100">
               <div className="card-header">
                 <h3 className="card-title">Conversation Trend</h3>
-                <div className="flex items-center gap-5">
-                  <label className="switch switch-sm">
-                    <input name="calls" type="checkbox" value="1" className="order-2" readOnly />
-                    <span className="switch-label order-1">Live sessions only</span>
-                  </label>
-                  <Select defaultValue="12">
-                    <SelectTrigger className="w-28" size="sm">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent className="w-32">
-                      <SelectItem value="1">1 month</SelectItem>
-                      <SelectItem value="3">3 months</SelectItem>
-                      <SelectItem value="6">6 months</SelectItem>
-                      <SelectItem value="12">12 months</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <span className="text-xs text-gray-500">{trends.length} data points (daily)</span>
               </div>
               <div className="card-body flex grow flex-col items-stretch justify-end px-3 py-1">
-                <ApexChart
-                  options={chartOptions}
-                  series={[{ name: 'Calls', data: monthlyCalls }]}
-                  type="area"
-                  height={250}
-                />
+                {trends.length > 0 ? (
+                  <ApexChart
+                    options={trendChartOptions}
+                    series={[{ name: 'Conversations', data: trends.map((t) => t.count) }]}
+                    type="area"
+                    height={250}
+                  />
+                ) : (
+                  <div className="flex h-[250px] items-center justify-center text-sm text-gray-500">
+                    {busy ? 'Loading trend data...' : 'No trend data available.'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
+        {/* Row 3: Channel Distribution + Domain Distribution + Live Session Window */}
         <div className="grid items-stretch gap-5 lg:grid-cols-3 lg:gap-7.5">
           <div className="lg:col-span-1">
-            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100">
+              <div className="card-header border-b border-gray-200 dark:border-coal-100">
+                <h3 className="card-title">Channel Distribution</h3>
+              </div>
+              <div className="card-body flex items-center justify-center p-5">
+                {channelData.length > 0 ? (
+                  <ApexChart
+                    options={channelChartOptions}
+                    series={channelData.map((c) => c.count)}
+                    type="donut"
+                    height={220}
+                  />
+                ) : (
+                  <div className="text-sm text-gray-500">{busy ? 'Loading...' : 'No channel data.'}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-1">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100">
+              <div className="card-header border-b border-gray-200 dark:border-coal-100">
+                <h3 className="card-title">Calls by Domain</h3>
+              </div>
+              <div className="card-body p-5">
+                {domainDist.length > 0 ? (
+                  <ApexChart
+                    options={domainBarOptions}
+                    series={[{ name: 'Calls', data: domainDist.map((d) => d.count) }]}
+                    type="bar"
+                    height={220}
+                  />
+                ) : (
+                  <div className="flex h-[220px] items-center justify-center text-sm text-gray-500">
+                    {busy ? 'Loading...' : 'No domain data.'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-1">
+            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100">
               <div className="card-body p-5 lg:p-7.5 lg:pt-6">
                 <div className="mb-7.5 flex items-center justify-between gap-5 flex-wrap">
                   <div className="flex flex-col gap-1">
@@ -424,10 +495,10 @@ const OverviewPage = () => {
                   </div>
                 </div>
                 <p className="mb-8 text-sm font-normal leading-5.5 text-gray-800 dark:text-gray-400">
-                  Use this panel to jump into active calls, review domain readiness, and keep the
-                  escalation queue under control during live traffic.
+                  Jump into active calls, review domain readiness, and keep the
+                  escalation queue under control.
                 </p>
-                <div className="flex gap-10 rounded-lg bg-gray-100 p-5 ">
+                <div className="flex gap-10 rounded-lg bg-gray-100 p-5">
                   <div className="flex flex-col gap-5">
                     <div className="flex items-center gap-1.5 text-sm font-normal text-gray-800 dark:text-gray-200">
                       <KeenIcon icon="security-user" className="text-base text-gray-500" />
@@ -455,60 +526,73 @@ const OverviewPage = () => {
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="lg:col-span-2">
-            <div className="card h-full border border-gray-200 shadow-none dark:border-coal-100 ">
-              <div className="card-header flex-wrap gap-2 border-b border-gray-200 px-5 dark:border-coal-100">
-                <h3 className="card-title font-medium text-sm">Domains</h3>
-                <div className="ms-auto flex flex-wrap gap-2 lg:gap-5">
-                  <label className="input input-sm">
-                    <KeenIcon icon="magnifier" />
-                    <input type="text" placeholder="Search Domains..." readOnly />
-                  </label>
-                </div>
-              </div>
-              <div className="card-table scrollable-x-auto">
-                <table className="table table-auto align-middle text-sm">
-                  <thead>
-                    <tr>
-                      <th>Domain</th>
-                      <th>Status</th>
-                      <th>Industry</th>
-                      <th>Updated</th>
-                      <th className="text-end">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {domains.length === 0 && (
-                      <EmptyRow colSpan={5} text={busy ? 'Loading domains...' : 'No domains found.'} />
-                    )}
-                    {domains.slice(0, 6).map((item) => (
-                      <tr key={item.domain_id}>
-                        <td>
-                          <div className="font-semibold text-gray-900 dark:text-gray-100">
-                            {item.display_name}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {item.organization_name}
-                          </div>
-                        </td>
-                        <td>{item.active ? 'Active' : 'Draft'}</td>
-                        <td>{item.industry || '-'}</td>
-                        <td>{formatDateTime(item.updated_at)}</td>
-                        <td className="text-end">
-                          <button
-                            className="btn btn-sm btn-light"
-                            onClick={() => navigate(`/domains/${item.domain_id}`)}
-                          >
-                            Open
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        {/* Row 4: Domains table */}
+        <div className="card border border-gray-200 shadow-none dark:border-coal-100">
+          <div className="card-header flex-wrap gap-2 border-b border-gray-200 px-5 dark:border-coal-100">
+            <h3 className="card-title font-medium text-sm">Registered Domains</h3>
+            <div className="ms-auto flex flex-wrap gap-2 lg:gap-5">
+              <span className="text-xs text-gray-500">{domains.length} domains configured</span>
+              <button className="btn btn-sm btn-light" onClick={() => navigate('/domains')}>
+                View All
+              </button>
             </div>
+          </div>
+          <div className="card-table scrollable-x-auto">
+            <table className="table table-auto align-middle text-sm">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Status</th>
+                  <th>Industry</th>
+                  <th>Language</th>
+                  <th>Updated</th>
+                  <th className="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {domains.length === 0 && (
+                  <EmptyRow colSpan={6} text={busy ? 'Loading domains...' : 'No domains found.'} />
+                )}
+                {domains.slice(0, 8).map((item) => (
+                  <tr key={item.domain_id}>
+                    <td>
+                      <div className="font-semibold text-gray-900 dark:text-gray-100">
+                        {item.display_name}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        {item.organization_name}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge badge-sm ${item.active ? 'badge-success badge-outline' : 'badge-secondary badge-outline'}`}>
+                        {item.active ? 'Active' : 'Draft'}
+                      </span>
+                    </td>
+                    <td>{item.industry || '-'}</td>
+                    <td>{item.language || '-'}</td>
+                    <td>{formatDateTime(item.updated_at)}</td>
+                    <td className="text-end">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="btn btn-sm btn-light"
+                          onClick={() => navigate(`/domains/${item.domain_id}`)}
+                        >
+                          Open
+                        </button>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => navigate(`/domains/${item.domain_id}/test`)}
+                        >
+                          Test
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

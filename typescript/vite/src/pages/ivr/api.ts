@@ -19,11 +19,17 @@ import type {
 } from './types';
 
 function resolveApiBase(): string {
+  // In development, use the Vite proxy (relative paths) so the app works
+  // both on localhost and when accessed through any exposed/proxied URL.
+  // Only fall back to the explicit env var when running outside Vite dev server.
+  if (import.meta.env.DEV) {
+    return '';
+  }
   const fromEnv = import.meta.env.VITE_BACKEND_HTTP_URL as string | undefined;
   if (fromEnv && fromEnv.trim()) {
     return fromEnv.trim().replace(/\/$/, '');
   }
-  return 'http://localhost:8010';
+  return '';
 }
 
 const API_BASE = resolveApiBase();
@@ -507,4 +513,30 @@ export async function createConversationMessage(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+}
+
+
+/* ─── Analytics ─── */
+export type AnalyticsOverview = {
+  domains: { total: number; active: number };
+  conversations: { total: number; live: number; escalated: number; avgDurationSec: number };
+  agents: { total: number; available: number; busy: number };
+  escalations: { total: number; open: number; closed: number };
+  conversationsByChannel: { channel: string; count: number }[];
+  conversationsByStatus: { status: string; count: number }[];
+};
+export type ConversationTrend = { date: string; count: number };
+export type DomainDistribution = { domainCode: string; displayName: string; count: number };
+
+export async function fetchAnalyticsOverview(): Promise<AnalyticsOverview> {
+  return fetchJson<AnalyticsOverview>('/api/analytics/overview');
+}
+export async function fetchConversationTrends(): Promise<ConversationTrend[]> {
+  return fetchItems<ConversationTrend>('/api/analytics/conversation-trends');
+}
+export async function fetchDomainDistribution(): Promise<DomainDistribution[]> {
+  return fetchItems<DomainDistribution>('/api/analytics/domain-distribution');
+}
+export async function fetchSystemHealth(): Promise<{ status: string; database: string; timestamp: string }> {
+  return fetchJson('/api/analytics/health');
 }

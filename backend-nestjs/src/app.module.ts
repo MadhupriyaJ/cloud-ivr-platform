@@ -15,6 +15,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SpeechModule } from './modules/speech/speech.module';
 import { ToolDefinitionsModule } from './modules/tool-definitions/tool-definitions.module';
 import { HospitalModule } from './modules/hospital/hospital.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { HospitalModule } from './modules/hospital/hospital.module';
     SpeechModule,
     ToolDefinitionsModule,
     HospitalModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
 })
