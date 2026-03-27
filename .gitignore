@@ -1,6 +1,22 @@
+# Environment files
 .env
 .env.*
 !.env.example
 
+# Python
 .venv/
 __pycache__/
+*.pyc
+*.pyo
+
+# Node.js
+node_modules/
+dist/
+*.log
+
+# Build artifacts
+backend-nestjs/public/
+tyescript/vite/dist/
+
+# OS
+.DS_Store

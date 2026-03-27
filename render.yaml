@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: cloud-ivr-platform
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend-nestjs
+    buildCommand: |
+      npm install
+      cd ../typescript/vite && npm install && npm run build && cp -r dist ../backend-nestjs/public
+      cd ../backend-nestjs && npx nest build
+    startCommand: node dist/main.js
+    healthCheckPath: /api/analytics/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      - key: MSSQL_HOST
+        sync: false
+      - key: MSSQL_PORT
+        value: 1433
+      - key: MSSQL_USERNAME
+        sync: false
+      - key: MSSQL_PASSWORD
+        sync: false
+      - key: MSSQL_DATABASE
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        sync: false
+      - key: AZURE_OPENAI_API_VERSION
+        value: 2024-10-01-preview
+      - key: AZURE_SPEECH_REGION
+        sync: false
+      - key: AZURE_SPEECH_API_KEY
+        sync: false
+      - key: AZURE_COMMUNICATION_CONNECTION_STRING
+        sync: false
+      - key: VITE_BACKEND_HTTP_URL
+        fromService:
+          type: web
+          name: cloud-ivr-platform
+          property: host
+      - key: VITE_BACKEND_WS_URL
+        fromService:
+          type: web
+          name: cloud-ivr-platform
+          property: host

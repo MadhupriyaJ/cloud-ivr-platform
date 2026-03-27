@@ -1,6 +1,8 @@
+import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { AppController } from './app.controller';
 import { databaseConfig } from './config/database.config';
 import { azureConfig } from './config/azure.config';
@@ -25,6 +27,10 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
       load: [databaseConfig, azureConfig],
     }),
     TypeOrmModule.forRootAsync(databaseConfig.asTypeOrmFactory()),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'public'),
+      exclude: ['/api{*path}', '/ws{*path}', '/health'],
+    }),
     AgentsModule,
     ConversationsModule,
     DomainModule,

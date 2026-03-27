@@ -5,6 +5,8 @@ import tailwindcss from 'tailwindcss';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '../../backend-nestjs', '');
+  // Use localhost for the dev proxy to ensure it works in any environment
+  const backendUrl = 'http://localhost:8010';
 
   return {
     envDir: '../../backend-nestjs',
@@ -12,7 +14,20 @@ export default defineConfig(({ mode }) => {
     server: {
       host: env.VITE_FRONTEND_HOST || '0.0.0.0',
       port: Number(env.VITE_FRONTEND_PORT || 5170),
-      strictPort: true
+      strictPort: true,
+      proxy: {
+        '/api': {
+          target: backendUrl,
+          changeOrigin: true,
+          secure: false
+        },
+        '/ws': {
+          target: backendUrl.replace(/^http/, 'ws'),
+          ws: true,
+          changeOrigin: true,
+          secure: false
+        }
+      }
     },
     css: {
       postcss: {
