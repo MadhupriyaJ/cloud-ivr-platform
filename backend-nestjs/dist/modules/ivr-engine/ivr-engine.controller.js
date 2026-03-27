@@ -12,6 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var IvrEngineController_1;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IvrEngineController = void 0;
 const common_1 = require("@nestjs/common");
@@ -355,7 +356,7 @@ __decorate([
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_b = typeof Promise !== "undefined" && Promise) === "function" ? _b : Object)
 ], IvrEngineController.prototype, "startSession", null);
 __decorate([
     (0, common_1.Post)('session/:sessionId/input'),
@@ -363,48 +364,48 @@ __decorate([
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_c = typeof Promise !== "undefined" && Promise) === "function" ? _c : Object)
 ], IvrEngineController.prototype, "processInput", null);
 __decorate([
     (0, common_1.Get)('session/:sessionId'),
     __param(0, (0, common_1.Param)('sessionId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_d = typeof Promise !== "undefined" && Promise) === "function" ? _d : Object)
 ], IvrEngineController.prototype, "getSession", null);
 __decorate([
     (0, common_1.Post)('session/:sessionId/end'),
     __param(0, (0, common_1.Param)('sessionId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
 ], IvrEngineController.prototype, "endSession", null);
 __decorate([
     (0, common_1.Get)('sessions/active'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_f = typeof Promise !== "undefined" && Promise) === "function" ? _f : Object)
 ], IvrEngineController.prototype, "getActiveSessions", null);
 __decorate([
     (0, common_1.Get)('flows'),
     __param(0, (0, common_1.Query)('domainCode')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
 ], IvrEngineController.prototype, "listFlows", null);
 __decorate([
     (0, common_1.Get)('flows/:flowId'),
     __param(0, (0, common_1.Param)('flowId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
 ], IvrEngineController.prototype, "getFlow", null);
 __decorate([
     (0, common_1.Post)('flows'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_j = typeof Promise !== "undefined" && Promise) === "function" ? _j : Object)
 ], IvrEngineController.prototype, "createFlow", null);
 __decorate([
     (0, common_1.Put)('flows/:flowId'),
@@ -412,7 +413,7 @@ __decorate([
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_k = typeof Promise !== "undefined" && Promise) === "function" ? _k : Object)
 ], IvrEngineController.prototype, "updateFlow", null);
 __decorate([
     (0, common_1.Post)('flows/:flowId/nodes'),
@@ -420,7 +421,7 @@ __decorate([
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_l = typeof Promise !== "undefined" && Promise) === "function" ? _l : Object)
 ], IvrEngineController.prototype, "createNode", null);
 __decorate([
     (0, common_1.Put)('nodes/:nodeId'),
@@ -428,14 +429,14 @@ __decorate([
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_m = typeof Promise !== "undefined" && Promise) === "function" ? _m : Object)
 ], IvrEngineController.prototype, "updateNode", null);
 __decorate([
     (0, common_1.Delete)('nodes/:nodeId'),
     __param(0, (0, common_1.Param)('nodeId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_o = typeof Promise !== "undefined" && Promise) === "function" ? _o : Object)
 ], IvrEngineController.prototype, "deleteNode", null);
 __decorate([
     (0, common_1.Post)('nodes/:nodeId/actions'),
@@ -443,29 +444,29 @@ __decorate([
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_p = typeof Promise !== "undefined" && Promise) === "function" ? _p : Object)
 ], IvrEngineController.prototype, "createAction", null);
 __decorate([
     (0, common_1.Get)('endpoints'),
     __param(0, (0, common_1.Query)('domainCode')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_q = typeof Promise !== "undefined" && Promise) === "function" ? _q : Object)
 ], IvrEngineController.prototype, "listEndpoints", null);
 __decorate([
     (0, common_1.Post)('endpoints'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_r = typeof Promise !== "undefined" && Promise) === "function" ? _r : Object)
 ], IvrEngineController.prototype, "createEndpoint", null);
 __decorate([
     (0, common_1.Put)('endpoints/:endpointId'),
     __param(0, (0, common_1.Param)('endpointId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:paramtypes", [String, typeof (_s = typeof Record !== "undefined" && Record) === "function" ? _s : Object]),
+    __metadata("design:returntype", typeof (_t = typeof Promise !== "undefined" && Promise) === "function" ? _t : Object)
 ], IvrEngineController.prototype, "updateEndpoint", null);
 __decorate([
     (0, common_1.Get)('errors'),
@@ -473,27 +474,26 @@ __decorate([
     __param(1, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_u = typeof Promise !== "undefined" && Promise) === "function" ? _u : Object)
 ], IvrEngineController.prototype, "getErrorLogs", null);
 __decorate([
     (0, common_1.Post)('cache/invalidate'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_v = typeof Promise !== "undefined" && Promise) === "function" ? _v : Object)
 ], IvrEngineController.prototype, "invalidateCache", null);
 __decorate([
     (0, common_1.Get)('health'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", typeof (_w = typeof Promise !== "undefined" && Promise) === "function" ? _w : Object)
 ], IvrEngineController.prototype, "getHealth", null);
 exports.IvrEngineController = IvrEngineController = IvrEngineController_1 = __decorate([
     (0, common_1.Controller)('ivr-engine'),
     __param(3, (0, typeorm_1.InjectDataSource)()),
     __metadata("design:paramtypes", [ivr_flow_loader_service_1.IvrFlowLoaderService,
         flow_executor_service_1.FlowExecutorService,
-        api_integration_service_1.ApiIntegrationService,
-        typeorm_2.DataSource])
+        api_integration_service_1.ApiIntegrationService, typeof (_a = typeof typeorm_2.DataSource !== "undefined" && typeorm_2.DataSource) === "function" ? _a : Object])
 ], IvrEngineController);
 //# sourceMappingURL=ivr-engine.controller.js.map

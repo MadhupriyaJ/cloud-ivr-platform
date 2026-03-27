@@ -12,6 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var FlowExecutorService_1;
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FlowExecutorService = void 0;
 const common_1 = require("@nestjs/common");
@@ -321,7 +322,6 @@ exports.FlowExecutorService = FlowExecutorService = FlowExecutorService_1 = __de
     (0, common_1.Injectable)(),
     __param(2, (0, typeorm_1.InjectDataSource)()),
     __metadata("design:paramtypes", [ivr_flow_loader_service_1.IvrFlowLoaderService,
-        api_integration_service_1.ApiIntegrationService,
-        typeorm_2.DataSource])
+        api_integration_service_1.ApiIntegrationService, typeof (_a = typeof typeorm_2.DataSource !== "undefined" && typeorm_2.DataSource) === "function" ? _a : Object])
 ], FlowExecutorService);
 //# sourceMappingURL=flow-executor.service.js.map
