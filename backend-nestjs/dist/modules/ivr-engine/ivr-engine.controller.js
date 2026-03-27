@@ -20,17 +20,20 @@ const flow_executor_service_1 = require("./flow-executor.service");
 const api_integration_service_1 = require("./api-integration.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
+const cache_service_1 = require("../../common/cache.service");
 let IvrEngineController = IvrEngineController_1 = class IvrEngineController {
     flowLoader;
     flowExecutor;
     apiIntegration;
     dataSource;
+    cache;
     logger = new common_1.Logger(IvrEngineController_1.name);
-    constructor(flowLoader, flowExecutor, apiIntegration, dataSource) {
+    constructor(flowLoader, flowExecutor, apiIntegration, dataSource, cache) {
         this.flowLoader = flowLoader;
         this.flowExecutor = flowExecutor;
         this.apiIntegration = apiIntegration;
         this.dataSource = dataSource;
+        this.cache = cache;
     }
     async startSession(body) {
         if (!body.domainCode) {
@@ -96,17 +99,15 @@ let IvrEngineController = IvrEngineController_1 = class IvrEngineController {
     }
     async listFlows(domainCode) {
         if (!domainCode) {
-            const result = await this.dataSource.query(`SELECT f.FlowId, f.DomainId, f.FlowCode, f.FlowName, f.Description, 
+            return this.cache.getOrSet('ivr:flows:all', () => this.dataSource.query(`SELECT f.FlowId, f.DomainId, f.FlowCode, f.FlowName, f.Description, 
                 f.IsEntryFlow, f.FlowVersion, f.IsActive, f.CreatedAt, f.UpdatedAt,
                 d.DomainCode, d.DisplayName as DomainName,
                 (SELECT COUNT(*) FROM IvrFlowNodes n WHERE n.FlowId = f.FlowId) as NodeCount
          FROM IvrFlows f
          JOIN Domains d ON d.DomainId = f.DomainId
-         ORDER BY d.DomainCode, f.IsEntryFlow DESC`);
-            return result;
+         ORDER BY d.DomainCode, f.IsEntryFlow DESC`), 30_000);
         }
-        const flows = await this.flowLoader.listFlowsForDomain(domainCode);
-        return flows;
+        return this.cache.getOrSet(`ivr:flows:${domainCode}`, () => this.flowLoader.listFlowsForDomain(domainCode), 30_000);
     }
     async getFlow(flowId) {
         const flow = await this.dataSource.query(`SELECT FlowId, DomainId, FlowCode, FlowName, Description, IsEntryFlow, FlowVersion, IsActive
@@ -255,16 +256,19 @@ let IvrEngineController = IvrEngineController_1 = class IvrEngineController {
         return result[0];
     }
     async listEndpoints(domainCode) {
-        if (domainCode) {
-            const domainResult = await this.dataSource.query(`SELECT DomainId FROM Domains WHERE DomainCode = @0`, [domainCode]);
-            if (!domainResult || domainResult.length === 0)
-                return [];
-            return this.dataSource.query(`SELECT * FROM DomainApiEndpoints WHERE DomainId = @0 ORDER BY EndpointCode`, [domainResult[0].DomainId]);
-        }
-        return this.dataSource.query(`SELECT e.*, d.DomainCode, d.DisplayName as DomainName
-       FROM DomainApiEndpoints e
-       JOIN Domains d ON d.DomainId = e.DomainId
-       ORDER BY d.DomainCode, e.EndpointCode`);
+        const cacheKey = domainCode ? `ivr:endpoints:${domainCode}` : 'ivr:endpoints:all';
+        return this.cache.getOrSet(cacheKey, async () => {
+            if (domainCode) {
+                const domainResult = await this.dataSource.query(`SELECT DomainId FROM Domains WHERE DomainCode = @0`, [domainCode]);
+                if (!domainResult || domainResult.length === 0)
+                    return [];
+                return this.dataSource.query(`SELECT * FROM DomainApiEndpoints WHERE DomainId = @0 ORDER BY EndpointCode`, [domainResult[0].DomainId]);
+            }
+            return this.dataSource.query(`SELECT e.*, d.DomainCode, d.DisplayName as DomainName
+         FROM DomainApiEndpoints e
+         JOIN Domains d ON d.DomainId = e.DomainId
+         ORDER BY d.DomainCode, e.EndpointCode`);
+        }, 30_000);
     }
     async createEndpoint(body) {
         const domainResult = await this.dataSource.query(`SELECT DomainId FROM Domains WHERE DomainCode = @0`, [body.domainCode]);
@@ -333,23 +337,35 @@ let IvrEngineController = IvrEngineController_1 = class IvrEngineController {
     }
     async invalidateCache(body) {
         this.flowLoader.invalidateCache(body.domainCode);
+        if (body.domainCode) {
+            this.cache.invalidate(`ivr:flows:${body.domainCode}`);
+            this.cache.invalidate(`ivr:endpoints:${body.domainCode}`);
+        }
+        this.cache.invalidatePrefix('ivr:');
         return { success: true, message: body.domainCode ? `Cache invalidated for ${body.domainCode}` : 'All caches invalidated' };
     }
     async getHealth() {
         try {
-            const flowCount = await this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlows WHERE IsActive = 1');
-            const nodeCount = await this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlowNodes WHERE IsActive = 1');
-            const endpointCount = await this.dataSource.query('SELECT COUNT(*) as cnt FROM DomainApiEndpoints WHERE IsActive = 1');
-            const errorCount = await this.dataSource.query(`SELECT COUNT(*) as cnt FROM ErrorLogs WHERE CreatedAt >= DATEADD(HOUR, -24, GETUTCDATE())`);
+            const stats = await this.cache.getOrSet('ivr:health:stats', async () => {
+                const [flowCount, nodeCount, endpointCount, errorCount] = await Promise.all([
+                    this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlows WHERE IsActive = 1'),
+                    this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlowNodes WHERE IsActive = 1'),
+                    this.dataSource.query('SELECT COUNT(*) as cnt FROM DomainApiEndpoints WHERE IsActive = 1'),
+                    this.dataSource.query(`SELECT COUNT(*) as cnt FROM ErrorLogs WHERE CreatedAt >= DATEADD(HOUR, -24, GETUTCDATE())`),
+                ]);
+                return {
+                    flows: flowCount[0].cnt,
+                    nodes: nodeCount[0].cnt,
+                    endpoints: endpointCount[0].cnt,
+                    errorsLast24h: errorCount[0].cnt,
+                };
+            }, 30_000);
             const activeSessions = this.flowExecutor.getActiveSessions();
             return {
                 status: 'healthy',
                 engine: {
-                    flows: flowCount[0].cnt,
-                    nodes: nodeCount[0].cnt,
-                    endpoints: endpointCount[0].cnt,
+                    ...stats,
                     activeSessions: activeSessions.length,
-                    errorsLast24h: errorCount[0].cnt,
                 },
                 timestamp: new Date().toISOString(),
             };
@@ -504,6 +520,7 @@ exports.IvrEngineController = IvrEngineController = IvrEngineController_1 = __de
     __metadata("design:paramtypes", [ivr_flow_loader_service_1.IvrFlowLoaderService,
         flow_executor_service_1.FlowExecutorService,
         api_integration_service_1.ApiIntegrationService,
-        typeorm_2.DataSource])
+        typeorm_2.DataSource,
+        cache_service_1.CacheService])
 ], IvrEngineController);
 //# sourceMappingURL=ivr-engine.controller.js.map

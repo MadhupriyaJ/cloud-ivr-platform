@@ -125,6 +125,17 @@ export const databaseConfig = Object.assign(
               encrypt: config.encrypt,
               trustServerCertificate: config.trustServerCertificate,
             },
+            // Connection pool settings for high-latency remote DB
+            extra: {
+              pool: {
+                min: 5,
+                max: 20,
+                idleTimeoutMillis: 60000,
+                acquireTimeoutMillis: 30000,
+              },
+              connectionTimeout: 15000,
+              requestTimeout: 15000,
+            },
           };
         },
       };

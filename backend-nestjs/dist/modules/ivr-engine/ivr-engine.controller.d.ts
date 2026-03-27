@@ -2,13 +2,15 @@ import { IvrFlowLoaderService } from './ivr-flow-loader.service';
 import { FlowExecutorService } from './flow-executor.service';
 import { ApiIntegrationService } from './api-integration.service';
 import { DataSource } from 'typeorm';
+import { CacheService } from '../../common/cache.service';
 export declare class IvrEngineController {
     private readonly flowLoader;
     private readonly flowExecutor;
     private readonly apiIntegration;
     private readonly dataSource;
+    private readonly cache;
     private readonly logger;
-    constructor(flowLoader: IvrFlowLoaderService, flowExecutor: FlowExecutorService, apiIntegration: ApiIntegrationService, dataSource: DataSource);
+    constructor(flowLoader: IvrFlowLoaderService, flowExecutor: FlowExecutorService, apiIntegration: ApiIntegrationService, dataSource: DataSource, cache: CacheService);
     startSession(body: {
         domainCode: string;
         sessionId?: string;

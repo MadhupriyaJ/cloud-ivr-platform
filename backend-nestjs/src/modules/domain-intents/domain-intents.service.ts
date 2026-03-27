@@ -12,6 +12,12 @@ export class DomainIntentsService {
     private readonly repository: Repository<DomainIntentEntity>,
   ) {}
 
+  async listAll(): Promise<DomainIntentEntity[]> {
+    return this.repository.find({
+      order: { priority: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
   async listByDomain(domainId: string): Promise<DomainIntentEntity[]> {
     return this.repository.find({
       where: { domainId },

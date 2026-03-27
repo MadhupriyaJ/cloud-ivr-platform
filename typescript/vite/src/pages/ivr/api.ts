@@ -17,6 +17,7 @@ import type {
   PromptTemplate,
   ToolDefinition
 } from './types';
+import { cachedFetch, invalidateCachePrefix } from './apiCache';
 
 function resolveApiBase(): string {
   // In development, use the Vite proxy (relative paths) so the app works
@@ -48,11 +49,11 @@ async function fetchItems<T>(path: string): Promise<T[]> {
 }
 
 export async function fetchDomains(): Promise<DomainConfig[]> {
-  return fetchItems<DomainConfig>('/api/domains');
+  return cachedFetch('domains:list', () => fetchItems<DomainConfig>('/api/domains'), 60_000);
 }
 
 export async function fetchDomain(domainId: string): Promise<DomainConfig> {
-  return fetchJson<DomainConfig>(`/api/domains/${encodeURIComponent(domainId)}`);
+  return cachedFetch(`domains:${domainId}`, () => fetchJson<DomainConfig>(`/api/domains/${encodeURIComponent(domainId)}`), 60_000);
 }
 
 export async function generateDomain(
@@ -87,6 +88,7 @@ export async function saveDomain(domainId: string, payload: DomainPayload): Prom
 
 export async function removeDomain(domainId: string): Promise<void> {
   await fetchJson(`/api/domains/${encodeURIComponent(domainId)}`, { method: 'DELETE' });
+  invalidateCachePrefix('domains:');
 }
 
 export async function fetchDomainIntents(domainUuid: string): Promise<DomainIntent[]> {
@@ -186,7 +188,7 @@ export async function deleteDomainRule(domainUuid: string, ruleId: string): Prom
 }
 
 export async function fetchConversations(): Promise<Conversation[]> {
-  return fetchItems<Conversation>('/api/conversations');
+  return cachedFetch('conversations:list', () => fetchItems<Conversation>('/api/conversations'), 15_000);
 }
 
 export async function fetchConversationMessages(
@@ -214,7 +216,7 @@ export async function createEscalation(payload: {
 }
 
 export async function fetchAgents(): Promise<Agent[]> {
-  return fetchItems<Agent>('/api/agents');
+  return cachedFetch('agents:list', () => fetchItems<Agent>('/api/agents'), 60_000);
 }
 
 export async function createAgent(payload: {
@@ -347,7 +349,7 @@ export async function bootstrapHospital(payload?: {
 }
 
 export async function fetchHospitalDepartments(): Promise<HospitalDepartment[]> {
-  return fetchItems<HospitalDepartment>('/api/hospital/departments');
+  return cachedFetch('hospital:departments', () => fetchItems<HospitalDepartment>('/api/hospital/departments'), 120_000);
 }
 
 export async function fetchHospitalDoctors(departmentId?: string): Promise<HospitalDoctor[]> {
@@ -529,7 +531,7 @@ export type ConversationTrend = { date: string; count: number };
 export type DomainDistribution = { domainCode: string; displayName: string; count: number };
 
 export async function fetchAnalyticsOverview(): Promise<AnalyticsOverview> {
-  return fetchJson<AnalyticsOverview>('/api/analytics/overview');
+  return cachedFetch('analytics:overview', () => fetchJson<AnalyticsOverview>('/api/analytics/overview'), 30_000);
 }
 export async function fetchConversationTrends(): Promise<ConversationTrend[]> {
   return fetchItems<ConversationTrend>('/api/analytics/conversation-trends');

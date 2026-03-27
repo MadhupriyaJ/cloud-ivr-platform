@@ -5,24 +5,34 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { HospitalIvrRequestDto } from './dto/hospital-ivr-request.dto';
 import { BootstrapHospitalDto } from './dto/bootstrap-hospital.dto';
+import { CacheService } from '../../common/cache.service';
 
 @Controller('hospital')
 export class HospitalController {
-  constructor(private readonly hospitalService: HospitalService) {}
+  constructor(
+    private readonly hospitalService: HospitalService,
+    private readonly cache: CacheService,
+  ) {}
 
   @Post('bootstrap')
   async bootstrap(@Body() payload: BootstrapHospitalDto) {
+    this.cache.invalidatePrefix('hospital:');
     return this.hospitalService.bootstrap(payload);
   }
 
   @Get('departments')
   async listDepartments() {
-    return { items: await this.hospitalService.listDepartments() };
+    return this.cache.getOrSet('hospital:departments', async () => ({
+      items: await this.hospitalService.listDepartments(),
+    }), 120_000); // 2 min cache — departments rarely change
   }
 
   @Get('doctors')
   async listDoctors(@Query('departmentId') departmentId?: string) {
-    return { items: await this.hospitalService.listDoctors(departmentId) };
+    const key = departmentId ? `hospital:doctors:${departmentId}` : 'hospital:doctors:all';
+    return this.cache.getOrSet(key, async () => ({
+      items: await this.hospitalService.listDoctors(departmentId),
+    }), 60_000);
   }
 
   @Get('doctors/available')
@@ -50,6 +60,7 @@ export class HospitalController {
 
   @Post('appointments')
   async createAppointment(@Body() payload: CreateAppointmentDto) {
+    this.cache.invalidatePrefix('hospital:appointments');
     return this.hospitalService.createAppointment(payload);
   }
 
@@ -69,7 +80,8 @@ export class HospitalController {
     @Query('patientCode') patientCode?: string,
     @Query('phone') phoneNumber?: string,
   ) {
-    return {
+    const key = `hospital:appointments:${departmentId || 'all'}:${date || 'all'}:${status || 'all'}`;
+    return this.cache.getOrSet(key, async () => ({
       items: await this.hospitalService.listAppointments({
         departmentId,
         date,
@@ -77,7 +89,7 @@ export class HospitalController {
         patientCode,
         phoneNumber,
       }),
-    };
+    }), 15_000); // 15s cache for appointments
   }
 
   @Put('appointments/:appointmentId/reschedule')
@@ -85,11 +97,13 @@ export class HospitalController {
     @Param('appointmentId') appointmentId: string,
     @Body() payload: RescheduleAppointmentDto,
   ) {
+    this.cache.invalidatePrefix('hospital:appointments');
     return this.hospitalService.rescheduleAppointment(appointmentId, payload);
   }
 
   @Put('appointments/:appointmentId/cancel')
   async cancelAppointment(@Param('appointmentId') appointmentId: string) {
+    this.cache.invalidatePrefix('hospital:appointments');
     return this.hospitalService.cancelAppointment(appointmentId);
   }
 

@@ -12,6 +12,12 @@ export class DomainRulesService {
     private readonly repository: Repository<DomainRuleEntity>,
   ) {}
 
+  async listAll(): Promise<DomainRuleEntity[]> {
+    return this.repository.find({
+      order: { priority: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
   async listByDomain(domainId: string): Promise<DomainRuleEntity[]> {
     return this.repository.find({
       where: { domainId },

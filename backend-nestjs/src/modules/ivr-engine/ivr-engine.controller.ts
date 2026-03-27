@@ -4,6 +4,7 @@ import { FlowExecutorService, FlowStepResult } from './flow-executor.service';
 import { ApiIntegrationService } from './api-integration.service';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { CacheService } from '../../common/cache.service';
 
 /**
  * IvrEngineController
@@ -25,6 +26,7 @@ export class IvrEngineController {
     private readonly apiIntegration: ApiIntegrationService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly cache: CacheService,
   ) {}
 
   // ============================================================
@@ -150,8 +152,7 @@ export class IvrEngineController {
   @Get('flows')
   async listFlows(@Query('domainCode') domainCode: string): Promise<any> {
     if (!domainCode) {
-      // Return all flows
-      const result = await this.dataSource.query(
+      return this.cache.getOrSet('ivr:flows:all', () => this.dataSource.query(
         `SELECT f.FlowId, f.DomainId, f.FlowCode, f.FlowName, f.Description, 
                 f.IsEntryFlow, f.FlowVersion, f.IsActive, f.CreatedAt, f.UpdatedAt,
                 d.DomainCode, d.DisplayName as DomainName,
@@ -159,12 +160,10 @@ export class IvrEngineController {
          FROM IvrFlows f
          JOIN Domains d ON d.DomainId = f.DomainId
          ORDER BY d.DomainCode, f.IsEntryFlow DESC`,
-      );
-      return result;
+      ), 30_000);
     }
 
-    const flows = await this.flowLoader.listFlowsForDomain(domainCode);
-    return flows;
+    return this.cache.getOrSet(`ivr:flows:${domainCode}`, () => this.flowLoader.listFlowsForDomain(domainCode), 30_000);
   }
 
   /**
@@ -419,25 +418,28 @@ export class IvrEngineController {
    */
   @Get('endpoints')
   async listEndpoints(@Query('domainCode') domainCode?: string): Promise<any> {
-    if (domainCode) {
-      const domainResult = await this.dataSource.query(
-        `SELECT DomainId FROM Domains WHERE DomainCode = @0`,
-        [domainCode],
-      );
-      if (!domainResult || domainResult.length === 0) return [];
+    const cacheKey = domainCode ? `ivr:endpoints:${domainCode}` : 'ivr:endpoints:all';
+    return this.cache.getOrSet(cacheKey, async () => {
+      if (domainCode) {
+        const domainResult = await this.dataSource.query(
+          `SELECT DomainId FROM Domains WHERE DomainCode = @0`,
+          [domainCode],
+        );
+        if (!domainResult || domainResult.length === 0) return [];
+
+        return this.dataSource.query(
+          `SELECT * FROM DomainApiEndpoints WHERE DomainId = @0 ORDER BY EndpointCode`,
+          [domainResult[0].DomainId],
+        );
+      }
 
       return this.dataSource.query(
-        `SELECT * FROM DomainApiEndpoints WHERE DomainId = @0 ORDER BY EndpointCode`,
-        [domainResult[0].DomainId],
+        `SELECT e.*, d.DomainCode, d.DisplayName as DomainName
+         FROM DomainApiEndpoints e
+         JOIN Domains d ON d.DomainId = e.DomainId
+         ORDER BY d.DomainCode, e.EndpointCode`,
       );
-    }
-
-    return this.dataSource.query(
-      `SELECT e.*, d.DomainCode, d.DisplayName as DomainName
-       FROM DomainApiEndpoints e
-       JOIN Domains d ON d.DomainId = e.DomainId
-       ORDER BY d.DomainCode, e.EndpointCode`,
-    );
+    }, 30_000);
   }
 
   /**
@@ -579,6 +581,12 @@ export class IvrEngineController {
   @Post('cache/invalidate')
   async invalidateCache(@Body() body: { domainCode?: string }): Promise<any> {
     this.flowLoader.invalidateCache(body.domainCode);
+    // Also invalidate the in-memory query cache
+    if (body.domainCode) {
+      this.cache.invalidate(`ivr:flows:${body.domainCode}`);
+      this.cache.invalidate(`ivr:endpoints:${body.domainCode}`);
+    }
+    this.cache.invalidatePrefix('ivr:');
     return { success: true, message: body.domainCode ? `Cache invalidated for ${body.domainCode}` : 'All caches invalidated' };
   }
 
@@ -589,23 +597,29 @@ export class IvrEngineController {
   @Get('health')
   async getHealth(): Promise<any> {
     try {
-      const flowCount = await this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlows WHERE IsActive = 1');
-      const nodeCount = await this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlowNodes WHERE IsActive = 1');
-      const endpointCount = await this.dataSource.query('SELECT COUNT(*) as cnt FROM DomainApiEndpoints WHERE IsActive = 1');
-      const errorCount = await this.dataSource.query(
-        `SELECT COUNT(*) as cnt FROM ErrorLogs WHERE CreatedAt >= DATEADD(HOUR, -24, GETUTCDATE())`,
-      );
+      const stats = await this.cache.getOrSet('ivr:health:stats', async () => {
+        // Run all 4 COUNT queries in parallel instead of sequential
+        const [flowCount, nodeCount, endpointCount, errorCount] = await Promise.all([
+          this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlows WHERE IsActive = 1'),
+          this.dataSource.query('SELECT COUNT(*) as cnt FROM IvrFlowNodes WHERE IsActive = 1'),
+          this.dataSource.query('SELECT COUNT(*) as cnt FROM DomainApiEndpoints WHERE IsActive = 1'),
+          this.dataSource.query(`SELECT COUNT(*) as cnt FROM ErrorLogs WHERE CreatedAt >= DATEADD(HOUR, -24, GETUTCDATE())`),
+        ]);
+        return {
+          flows: flowCount[0].cnt,
+          nodes: nodeCount[0].cnt,
+          endpoints: endpointCount[0].cnt,
+          errorsLast24h: errorCount[0].cnt,
+        };
+      }, 30_000); // 30s cache
 
       const activeSessions = this.flowExecutor.getActiveSessions();
 
       return {
         status: 'healthy',
         engine: {
-          flows: flowCount[0].cnt,
-          nodes: nodeCount[0].cnt,
-          endpoints: endpointCount[0].cnt,
+          ...stats,
           activeSessions: activeSessions.length,
-          errorsLast24h: errorCount[0].cnt,
         },
         timestamp: new Date().toISOString(),
       };

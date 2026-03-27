@@ -28,6 +28,7 @@ const tool_definitions_module_1 = require("./modules/tool-definitions/tool-defin
 const hospital_module_1 = require("./modules/hospital/hospital.module");
 const analytics_module_1 = require("./modules/analytics/analytics.module");
 const ivr_engine_module_1 = require("./modules/ivr-engine/ivr-engine.module");
+const cache_module_1 = require("./common/cache.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -44,6 +45,7 @@ exports.AppModule = AppModule = __decorate([
                 rootPath: (0, path_1.join)(__dirname, '..', 'public'),
                 exclude: ['/api{*path}', '/ws{*path}', '/health'],
             }),
+            cache_module_1.AppCacheModule,
             agents_module_1.AgentsModule,
             conversations_module_1.ConversationsModule,
             domain_module_1.DomainModule,

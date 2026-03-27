@@ -19,6 +19,7 @@ import { ToolDefinitionsModule } from './modules/tool-definitions/tool-definitio
 import { HospitalModule } from './modules/hospital/hospital.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { IvrEngineModule } from './modules/ivr-engine/ivr-engine.module';
+import { AppCacheModule } from './common/cache.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { IvrEngineModule } from './modules/ivr-engine/ivr-engine.module';
       rootPath: join(__dirname, '..', 'public'),
       exclude: ['/api{*path}', '/ws{*path}', '/health'],
     }),
+    AppCacheModule,
     AgentsModule,
     ConversationsModule,
     DomainModule,

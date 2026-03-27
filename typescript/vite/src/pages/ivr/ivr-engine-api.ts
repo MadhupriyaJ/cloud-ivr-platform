@@ -5,6 +5,8 @@
  * All routes are under /api/ivr-engine/...
  */
 
+import { cachedFetch, invalidateCachePrefix as invalidateFrontendCache } from './apiCache';
+
 function resolveApiBase(): string {
   if (import.meta.env.DEV) return '';
   const fromEnv = import.meta.env.VITE_BACKEND_HTTP_URL as string | undefined;
@@ -125,11 +127,12 @@ export interface FlowStepResult {
 
 export async function fetchIvrFlows(domainCode?: string): Promise<IvrFlow[]> {
   const suffix = domainCode ? `?domainCode=${encodeURIComponent(domainCode)}` : '';
-  return fetchJson<IvrFlow[]>(`/api/ivr-engine/flows${suffix}`);
+  const key = `ivr:flows:${domainCode || 'all'}`;
+  return cachedFetch(key, () => fetchJson<IvrFlow[]>(`/api/ivr-engine/flows${suffix}`), 30_000);
 }
 
 export async function fetchIvrFlow(flowId: number): Promise<IvrFlow & { nodes: IvrFlowNode[] }> {
-  return fetchJson(`/api/ivr-engine/flows/${flowId}`);
+  return cachedFetch(`ivr:flow:${flowId}`, () => fetchJson(`/api/ivr-engine/flows/${flowId}`), 30_000);
 }
 
 export async function createIvrFlow(payload: {
@@ -217,7 +220,8 @@ export async function createNodeAction(nodeId: number, payload: {
 
 export async function fetchApiEndpoints(domainCode?: string): Promise<DomainApiEndpoint[]> {
   const suffix = domainCode ? `?domainCode=${encodeURIComponent(domainCode)}` : '';
-  return fetchJson<DomainApiEndpoint[]>(`/api/ivr-engine/endpoints${suffix}`);
+  const key = `ivr:endpoints:${domainCode || 'all'}`;
+  return cachedFetch(key, () => fetchJson<DomainApiEndpoint[]>(`/api/ivr-engine/endpoints${suffix}`), 30_000);
 }
 
 export async function createApiEndpoint(payload: {
@@ -292,7 +296,7 @@ export async function getActiveSessions(): Promise<{ count: number; sessions: Iv
 // ─── Health & Monitoring ───
 
 export async function getIvrEngineHealth(): Promise<IvrEngineHealth> {
-  return fetchJson('/api/ivr-engine/health');
+  return cachedFetch('ivr:health', () => fetchJson('/api/ivr-engine/health'), 15_000);
 }
 
 export async function getErrorLogs(domainCode?: string, limit?: number): Promise<any[]> {
@@ -304,6 +308,8 @@ export async function getErrorLogs(domainCode?: string, limit?: number): Promise
 }
 
 export async function invalidateCache(domainCode?: string): Promise<{ success: boolean; message: string }> {
+  // Also clear frontend cache when backend cache is invalidated
+  invalidateFrontendCache('ivr:');
   return fetchJson('/api/ivr-engine/cache/invalidate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -1,9 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { CacheService } from '../../common/cache.service';
 import { DomainIntentsService } from '../domain-intents/domain-intents.service';
 import { DomainRulesService } from '../domain-rules/domain-rules.service';
 import { PromptTemplatesService } from '../prompt-templates/prompt-templates.service';
 import { DomainService } from './domain.service';
 import { CreateDomainDto } from './dto/create-domain.dto';
+
+const CACHE_TTL = 60_000; // 60 seconds for domain list
 
 @Controller('domains')
 export class DomainController {
@@ -12,13 +15,31 @@ export class DomainController {
     private readonly domainIntentsService: DomainIntentsService,
     private readonly domainRulesService: DomainRulesService,
     private readonly promptTemplatesService: PromptTemplatesService,
+    private readonly cache: CacheService,
   ) {}
 
-  private async toLegacyDomain(domain: any) {
-    const [intents, rules] = await Promise.all([
-      this.domainIntentsService.listByDomain(domain.domainId),
-      this.domainRulesService.listByDomain(domain.domainId),
-    ]);
+  /**
+   * Build the legacy domain response.
+   * When allIntents/allRules maps are provided, uses them (batch mode).
+   * Otherwise falls back to per-domain queries (single-domain mode).
+   */
+  private async toLegacyDomain(
+    domain: any,
+    allIntentsMap?: Map<string, any[]>,
+    allRulesMap?: Map<string, any[]>,
+  ) {
+    let intents: any[];
+    let rules: any[];
+
+    if (allIntentsMap && allRulesMap) {
+      intents = allIntentsMap.get(domain.domainId) || [];
+      rules = allRulesMap.get(domain.domainId) || [];
+    } else {
+      [intents, rules] = await Promise.all([
+        this.domainIntentsService.listByDomain(domain.domainId),
+        this.domainRulesService.listByDomain(domain.domainId),
+      ]);
+    }
 
     return {
       domain_uuid: domain.domainId,
@@ -201,18 +222,49 @@ export class DomainController {
     ]);
   }
 
+  /**
+   * OPTIMIZED: Uses cache + batch loading (3 parallel queries instead of N+1).
+   * First call: ~3 queries × 1.6s = ~4.8s (parallel → ~1.6s)
+   * Subsequent calls within 60s: ~0ms (from cache)
+   */
   @Get()
   async list() {
-    const items = await this.domainService.list();
-    return {
-      items: await Promise.all(items.map((item) => this.toLegacyDomain(item))),
-    };
+    return this.cache.getOrSet('domains:list', async () => {
+      // Load all data in 3 parallel queries instead of 1 + 2N sequential queries
+      const [items, allIntents, allRules] = await Promise.all([
+        this.domainService.list(),
+        this.domainIntentsService.listAll(),
+        this.domainRulesService.listAll(),
+      ]);
+
+      // Build lookup maps by domainId
+      const intentsMap = new Map<string, any[]>();
+      const rulesMap = new Map<string, any[]>();
+
+      for (const intent of allIntents) {
+        const domainId = intent.domainId;
+        if (!intentsMap.has(domainId)) intentsMap.set(domainId, []);
+        intentsMap.get(domainId)!.push(intent);
+      }
+
+      for (const rule of allRules) {
+        const domainId = rule.domainId;
+        if (!rulesMap.has(domainId)) rulesMap.set(domainId, []);
+        rulesMap.get(domainId)!.push(rule);
+      }
+
+      return {
+        items: await Promise.all(items.map((item) => this.toLegacyDomain(item, intentsMap, rulesMap))),
+      };
+    }, CACHE_TTL);
   }
 
   @Get(':domainCode')
   async getByCode(@Param('domainCode') domainCode: string) {
-    const item = await this.domainService.getByCode(domainCode);
-    return this.toLegacyDomain(item);
+    return this.cache.getOrSet(`domains:${domainCode}`, async () => {
+      const item = await this.domainService.getByCode(domainCode);
+      return this.toLegacyDomain(item);
+    }, CACHE_TTL);
   }
 
   @Post('generate')
@@ -249,6 +301,8 @@ export class DomainController {
       fallbackMessage: created.fallbackMessage,
       escalationMessage: created.escalationMessage,
     });
+
+    this.cache.invalidatePrefix('domains:');
     return this.toLegacyDomain(created);
   }
 
@@ -279,6 +333,8 @@ export class DomainController {
       fallbackMessage: created.fallbackMessage,
       escalationMessage: created.escalationMessage,
     });
+
+    this.cache.invalidatePrefix('domains:');
     return this.toLegacyDomain(created);
   }
 
@@ -309,12 +365,15 @@ export class DomainController {
       fallbackMessage: updated.fallbackMessage,
       escalationMessage: updated.escalationMessage,
     });
+
+    this.cache.invalidatePrefix('domains:');
     return this.toLegacyDomain(updated);
   }
 
   @Delete(':domainCode')
   async remove(@Param('domainCode') domainCode: string) {
     await this.domainService.deleteByCode(domainCode);
+    this.cache.invalidatePrefix('domains:');
     return {
       deleted: true,
       domain_id: domainCode,
