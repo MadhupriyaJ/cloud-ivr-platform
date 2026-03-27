@@ -161,11 +161,11 @@ const OverviewPage = () => {
         fetchDomainDistribution(),
         fetchSystemHealth()
       ]);
-      setDomains(domainItems);
-      setAnalytics(analyticsData);
-      setTrends(trendItems);
-      setDomainDist(distItems);
-      setHealth(healthData);
+      setDomains(domainItems ?? []);
+      setAnalytics(analyticsData ?? null);
+      setTrends(trendItems ?? []);
+      setDomainDist(distItems ?? []);
+      setHealth(healthData ?? null);
     } catch (error) {
       setToast({ kind: 'danger', text: `Failed to load overview: ${getErrorText(error)}` });
     } finally {

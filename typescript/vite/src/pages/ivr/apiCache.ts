@@ -28,13 +28,14 @@ export async function cachedFetch<T>(
   const entry = cache.get(key);
   const now = Date.now();
 
-  // Cache HIT and still fresh
-  if (entry && (now - entry.timestamp) < ttl) {
+  // Cache HIT and still fresh (timestamp > 0 means data has been resolved at least once)
+  if (entry && entry.timestamp > 0 && (now - entry.timestamp) < ttl) {
     return entry.data;
   }
 
   // Cache HIT but stale — return stale data, refresh in background
-  if (entry) {
+  // Only return stale data if it was actually resolved (timestamp > 0)
+  if (entry && entry.timestamp > 0) {
     if (!entry.promise) {
       entry.promise = fetcher().then(data => {
         cache.set(key, { data, timestamp: Date.now() });
@@ -44,19 +45,19 @@ export async function cachedFetch<T>(
     return entry.data;
   }
 
-  // Cache MISS — check for in-flight request deduplication
-  const existing = cache.get(key);
-  if (existing?.promise) {
-    return existing.promise;
+  // If entry exists but data hasn't resolved yet (timestamp === 0),
+  // return the in-flight promise to avoid returning null
+  if (entry?.promise) {
+    return entry.promise;
   }
 
-  // First fetch
+  // Cache MISS — first fetch
   const promise = fetcher().then(data => {
     cache.set(key, { data, timestamp: Date.now() });
     return data;
   });
 
-  // Store the promise for deduplication
+  // Store the promise for deduplication (data is null placeholder until resolved)
   cache.set(key, { data: null as any, timestamp: 0, promise });
 
   return promise;
