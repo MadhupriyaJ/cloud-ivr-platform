@@ -42,6 +42,30 @@ function buildAzureRealtimeUrl(): { url: string; headers: Record<string, string>
   };
 }
 
+/** Safely send a JSON message to a WebSocket if it's still open */
+function safeSend(ws: any, data: object): boolean {
+  try {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(data));
+      return true;
+    }
+  } catch (err) {
+    console.error('safeSend failed:', err);
+  }
+  return false;
+}
+
+/** Safely close a WebSocket if it's still open */
+function safeClose(ws: any, code?: number, reason?: string): void {
+  try {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      ws.close(code, reason);
+    }
+  } catch (err) {
+    console.error('safeClose failed:', err);
+  }
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const port = Number(process.env.PORT || 8010);
@@ -82,12 +106,35 @@ async function bootstrap() {
     let realtimeWs: any = null;
     let assistantText = '';
 
+    // ── CRITICAL: Add error handler on client ws immediately ──
+    // Without this, any error on the client WebSocket (e.g., invalid close
+    // code from a proxy) causes an unhandled 'error' event that crashes
+    // the entire Node.js process.
+    ws.on('error', (error: any) => {
+      console.error(`Client WS error [${clientId}]:`, error?.message || error);
+      safeClose(realtimeWs);
+    });
+
     try {
       const started = await realtimeService.startSession(clientId, { domainCode });
       const { url: realtimeUrl, headers } = buildAzureRealtimeUrl();
 
       realtimeWs = new WebSocket(realtimeUrl, {
         headers,
+      });
+
+      // ── CRITICAL: Attach error handler IMMEDIATELY after creating the
+      // Azure WebSocket, BEFORE the 'open' event fires. This prevents
+      // unhandled 'error' events from crashing the process when Azure
+      // OpenAI is unreachable or returns invalid frames. ──
+      realtimeWs.on('error', (error: any) => {
+        console.error(`Azure OpenAI realtime websocket error [${clientId}]:`, error?.message || error);
+        safeSend(ws, {
+          type: 'output_text',
+          text: 'Backend could not connect to Azure OpenAI realtime.',
+        });
+        safeSend(ws, { type: 'output_text_done' });
+        safeClose(ws);
       });
 
       realtimeWs.on('open', () => {
@@ -138,12 +185,12 @@ async function bootstrap() {
             message.delta
           ) {
             assistantText += message.delta;
-            ws.send(JSON.stringify({ type: 'output_text', text: message.delta }));
+            safeSend(ws, { type: 'output_text', text: message.delta });
             return;
           }
 
           if (type === 'response.audio.delta' && message.delta) {
-            ws.send(JSON.stringify({ type: 'output_audio', audio: message.delta }));
+            safeSend(ws, { type: 'output_audio', audio: message.delta });
             return;
           }
 
@@ -151,15 +198,15 @@ async function bootstrap() {
             if (assistantText.trim()) {
               await realtimeService.recordAssistantText(clientId, assistantText);
             }
-            ws.send(JSON.stringify({ type: 'output_text_done' }));
+            safeSend(ws, { type: 'output_text_done' });
             assistantText = '';
             return;
           }
 
           if (type === 'error') {
             const text = message.error?.message || 'Realtime API returned an error.';
-            ws.send(JSON.stringify({ type: 'output_text', text }));
-            ws.send(JSON.stringify({ type: 'output_text_done' }));
+            safeSend(ws, { type: 'output_text', text });
+            safeSend(ws, { type: 'output_text_done' });
           }
         } catch (error) {
           console.error('Failed to handle realtime message:', error);
@@ -167,34 +214,17 @@ async function bootstrap() {
       });
 
       realtimeWs.on('close', () => {
-        if (ws.readyState === ws.OPEN) {
-          ws.close();
-        }
+        safeClose(ws);
       });
 
-      realtimeWs.on('error', (error: any) => {
-        console.error('Azure OpenAI realtime websocket error:', error);
-        if (ws.readyState === ws.OPEN) {
-          ws.send(
-            JSON.stringify({
-              type: 'output_text',
-              text: 'Backend could not connect to Azure OpenAI realtime.',
-            }),
-          );
-          ws.send(JSON.stringify({ type: 'output_text_done' }));
-          ws.close();
-        }
+    } catch (error: any) {
+      console.error(`Failed to start IVR websocket session [${clientId}]:`, error?.message || error);
+      safeSend(ws, {
+        type: 'output_text',
+        text: `Backend could not start the IVR session for this domain.`,
       });
-    } catch (error) {
-      console.error('Failed to start IVR websocket session:', error);
-      ws.send(
-        JSON.stringify({
-          type: 'output_text',
-          text: `Backend could not start the IVR session for this domain.`,
-        }),
-      );
-      ws.send(JSON.stringify({ type: 'output_text_done' }));
-      ws.close();
+      safeSend(ws, { type: 'output_text_done' });
+      safeClose(ws);
       return;
     }
 
@@ -213,20 +243,19 @@ async function bootstrap() {
           }
         }
       } catch {
-        ws.send(JSON.stringify({ type: 'output_text', text: 'Invalid websocket message.' }));
-        ws.send(JSON.stringify({ type: 'output_text_done' }));
+        safeSend(ws, { type: 'output_text', text: 'Invalid websocket message.' });
+        safeSend(ws, { type: 'output_text_done' });
       }
     });
 
     ws.on('close', async () => {
-      if (realtimeWs && realtimeWs.readyState === WebSocket.OPEN) {
-        realtimeWs.close();
-      }
+      safeClose(realtimeWs);
       await realtimeService.unregisterClient(clientId);
     });
   });
 
   await app.listen(port, host);
+  console.log(`NestJS IVR backend running on http://${host}:${port}`);
 }
 
 void bootstrap();

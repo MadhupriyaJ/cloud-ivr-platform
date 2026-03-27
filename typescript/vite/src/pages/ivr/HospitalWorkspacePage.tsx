@@ -449,7 +449,7 @@ const HospitalWorkspacePage = () => {
         sequenceNo: consoleEntries.length + 1
       });
 
-      const response = await fetch(`${(import.meta.env.VITE_BACKEND_HTTP_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:8010'}/api/hospital/ivr/next`, {
+      const response = await fetch(`${(import.meta.env.VITE_BACKEND_HTTP_URL as string | undefined)?.replace(/\/$/, '') || ''}/api/hospital/ivr/next`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

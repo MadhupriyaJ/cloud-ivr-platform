@@ -51,7 +51,7 @@ const createInitialHospitalForm = () => ({
 
 const resolveBackendBaseUrl = () =>
   (import.meta.env.VITE_BACKEND_HTTP_URL as string | undefined)?.replace(/\/$/, '') ||
-  'http://localhost:8010';
+  '';  // Use relative paths — requests go through the Vite proxy / reverse proxy
 
 const DomainTestPage = () => {
   const { domainId } = useParams();
@@ -304,7 +304,7 @@ const DomainTestPage = () => {
     setHospitalError('');
     try {
       const response = await fetch(
-        `${(import.meta.env.VITE_BACKEND_HTTP_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:8010'}/api/hospital/ivr/next`,
+        `${(import.meta.env.VITE_BACKEND_HTTP_URL as string | undefined)?.replace(/\/$/, '') || ''}/api/hospital/ivr/next`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
