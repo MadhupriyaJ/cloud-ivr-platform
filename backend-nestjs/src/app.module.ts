@@ -16,6 +16,7 @@ import { SpeechModule } from './modules/speech/speech.module';
 import { ToolDefinitionsModule } from './modules/tool-definitions/tool-definitions.module';
 import { HospitalModule } from './modules/hospital/hospital.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { IvrEngineModule } from './modules/ivr-engine/ivr-engine.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     ToolDefinitionsModule,
     HospitalModule,
     AnalyticsModule,
+    IvrEngineModule,
   ],
   controllers: [AppController],
 })

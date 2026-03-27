@@ -53,6 +53,28 @@ export const MENU_SIDEBAR: TMenuConfig = [
     ]
   },
   {
+    title: 'IVR Flow Engine',
+    icon: 'setting',
+    children: [
+      {
+        title: 'IVR Flows',
+        path: '/ivr/flows'
+      },
+      {
+        title: 'API Endpoints',
+        path: '/ivr/api-endpoints'
+      },
+      {
+        title: 'Flow Simulator',
+        path: '/ivr/simulator'
+      },
+      {
+        title: 'Sessions & Logs',
+        path: '/ivr/sessions'
+      }
+    ]
+  },
+  {
     title: 'Domain Workspaces',
     icon: 'component',
     children: [

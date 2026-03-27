@@ -6,3 +6,8 @@ export * from './IvrEntryPage';
 export * from './AdminPages';
 export * from './HospitalWorkspacePage';
 export * from './N8nDomainBuilderPage';
+export * from './IvrFlowsPage';
+export * from './IvrFlowDetailPage';
+export * from './ApiEndpointsPage';
+export * from './IvrSimulatorPage';
+export * from './IvrSessionsPage';

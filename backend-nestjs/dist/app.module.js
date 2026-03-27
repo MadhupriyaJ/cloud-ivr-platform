@@ -24,6 +24,8 @@ const realtime_module_1 = require("./modules/realtime/realtime.module");
 const speech_module_1 = require("./modules/speech/speech.module");
 const tool_definitions_module_1 = require("./modules/tool-definitions/tool-definitions.module");
 const hospital_module_1 = require("./modules/hospital/hospital.module");
+const analytics_module_1 = require("./modules/analytics/analytics.module");
+const ivr_engine_module_1 = require("./modules/ivr-engine/ivr-engine.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -47,6 +49,8 @@ exports.AppModule = AppModule = __decorate([
             speech_module_1.SpeechModule,
             tool_definitions_module_1.ToolDefinitionsModule,
             hospital_module_1.HospitalModule,
+            analytics_module_1.AnalyticsModule,
+            ivr_engine_module_1.IvrEngineModule,
         ],
         controllers: [app_controller_1.AppController],
     })

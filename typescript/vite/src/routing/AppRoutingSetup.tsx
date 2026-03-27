@@ -85,7 +85,12 @@ import {
   N8nDomainBuilderPage,
   OverviewPage,
   PromptsToolsPage,
-  HospitalWorkspacePage
+  HospitalWorkspacePage,
+  IvrFlowsPage,
+  IvrFlowDetailPage,
+  ApiEndpointsPage,
+  IvrSimulatorPage,
+  IvrSessionsPage
 } from '@/pages/ivr';
 import { N8N_IVR_BUILDER_ENABLED, N8N_IVR_BUILDER_PATH } from '@/config/ivr-builder.config';
 
@@ -122,6 +127,11 @@ const AppRoutingSetup = (): ReactElement => {
           )}
           <Route path="/ivr/test" element={<DomainTestPage />} />
           <Route path="/ivr/studio" element={<Navigate to="/domains" replace />} />
+          <Route path="/ivr/flows" element={<IvrFlowsPage />} />
+          <Route path="/ivr/flows/:flowId" element={<IvrFlowDetailPage />} />
+          <Route path="/ivr/api-endpoints" element={<ApiEndpointsPage />} />
+          <Route path="/ivr/simulator" element={<IvrSimulatorPage />} />
+          <Route path="/ivr/sessions" element={<IvrSessionsPage />} />
           <Route path="/dashboard/default" element={<DefaultPage />} />
           <Route path="/dark-sidebar" element={<Demo1DarkSidebarPage />} />
           <Route path="/public-profile/profiles/default" element={<ProfileDefaultPage />} />

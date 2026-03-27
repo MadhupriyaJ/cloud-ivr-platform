@@ -35,6 +35,28 @@ function buildAzureRealtimeUrl() {
         },
     };
 }
+function safeSend(ws, data) {
+    try {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(data));
+            return true;
+        }
+    }
+    catch (err) {
+        console.error('safeSend failed:', err);
+    }
+    return false;
+}
+function safeClose(ws, code, reason) {
+    try {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+            ws.close(code, reason);
+        }
+    }
+    catch (err) {
+        console.error('safeClose failed:', err);
+    }
+}
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const port = Number(process.env.PORT || 8010);
@@ -68,11 +90,24 @@ async function bootstrap() {
         const domainCode = (url.searchParams.get('domain') || 'general').trim().toLowerCase();
         let realtimeWs = null;
         let assistantText = '';
+        ws.on('error', (error) => {
+            console.error(`Client WS error [${clientId}]:`, error?.message || error);
+            safeClose(realtimeWs);
+        });
         try {
             const started = await realtimeService.startSession(clientId, { domainCode });
             const { url: realtimeUrl, headers } = buildAzureRealtimeUrl();
             realtimeWs = new WebSocket(realtimeUrl, {
                 headers,
+            });
+            realtimeWs.on('error', (error) => {
+                console.error(`Azure OpenAI realtime websocket error [${clientId}]:`, error?.message || error);
+                safeSend(ws, {
+                    type: 'output_text',
+                    text: 'Backend could not connect to Azure OpenAI realtime.',
+                });
+                safeSend(ws, { type: 'output_text_done' });
+                safeClose(ws);
             });
             realtimeWs.on('open', () => {
                 const sessionUpdate = {
@@ -113,25 +148,25 @@ async function bootstrap() {
                         type === 'response.audio_transcript.delta') &&
                         message.delta) {
                         assistantText += message.delta;
-                        ws.send(JSON.stringify({ type: 'output_text', text: message.delta }));
+                        safeSend(ws, { type: 'output_text', text: message.delta });
                         return;
                     }
                     if (type === 'response.audio.delta' && message.delta) {
-                        ws.send(JSON.stringify({ type: 'output_audio', audio: message.delta }));
+                        safeSend(ws, { type: 'output_audio', audio: message.delta });
                         return;
                     }
                     if (type === 'response.done') {
                         if (assistantText.trim()) {
                             await realtimeService.recordAssistantText(clientId, assistantText);
                         }
-                        ws.send(JSON.stringify({ type: 'output_text_done' }));
+                        safeSend(ws, { type: 'output_text_done' });
                         assistantText = '';
                         return;
                     }
                     if (type === 'error') {
                         const text = message.error?.message || 'Realtime API returned an error.';
-                        ws.send(JSON.stringify({ type: 'output_text', text }));
-                        ws.send(JSON.stringify({ type: 'output_text_done' }));
+                        safeSend(ws, { type: 'output_text', text });
+                        safeSend(ws, { type: 'output_text_done' });
                     }
                 }
                 catch (error) {
@@ -139,30 +174,17 @@ async function bootstrap() {
                 }
             });
             realtimeWs.on('close', () => {
-                if (ws.readyState === ws.OPEN) {
-                    ws.close();
-                }
-            });
-            realtimeWs.on('error', (error) => {
-                console.error('Azure OpenAI realtime websocket error:', error);
-                if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'output_text',
-                        text: 'Backend could not connect to Azure OpenAI realtime.',
-                    }));
-                    ws.send(JSON.stringify({ type: 'output_text_done' }));
-                    ws.close();
-                }
+                safeClose(ws);
             });
         }
         catch (error) {
-            console.error('Failed to start IVR websocket session:', error);
-            ws.send(JSON.stringify({
+            console.error(`Failed to start IVR websocket session [${clientId}]:`, error?.message || error);
+            safeSend(ws, {
                 type: 'output_text',
                 text: `Backend could not start the IVR session for this domain.`,
-            }));
-            ws.send(JSON.stringify({ type: 'output_text_done' }));
-            ws.close();
+            });
+            safeSend(ws, { type: 'output_text_done' });
+            safeClose(ws);
             return;
         }
         ws.on('message', async (payload) => {
@@ -179,18 +201,17 @@ async function bootstrap() {
                 }
             }
             catch {
-                ws.send(JSON.stringify({ type: 'output_text', text: 'Invalid websocket message.' }));
-                ws.send(JSON.stringify({ type: 'output_text_done' }));
+                safeSend(ws, { type: 'output_text', text: 'Invalid websocket message.' });
+                safeSend(ws, { type: 'output_text_done' });
             }
         });
         ws.on('close', async () => {
-            if (realtimeWs && realtimeWs.readyState === WebSocket.OPEN) {
-                realtimeWs.close();
-            }
+            safeClose(realtimeWs);
             await realtimeService.unregisterClient(clientId);
         });
     });
     await app.listen(port, host);
+    console.log(`NestJS IVR backend running on http://${host}:${port}`);
 }
 void bootstrap();
 //# sourceMappingURL=main.js.map

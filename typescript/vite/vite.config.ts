@@ -12,7 +12,17 @@ export default defineConfig(({ mode }) => {
     server: {
       host: env.VITE_FRONTEND_HOST || '0.0.0.0',
       port: Number(env.VITE_FRONTEND_PORT || 5170),
-      strictPort: true
+      strictPort: true,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:8010',
+          changeOrigin: true,
+        },
+        '/ws': {
+          target: 'ws://localhost:8010',
+          ws: true,
+        },
+      },
     },
     css: {
       postcss: {
