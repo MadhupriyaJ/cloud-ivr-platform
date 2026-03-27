@@ -18,8 +18,10 @@ function resolveWsUrl(domainId: string): string {
     return `${cleaned}${joiner}domain=${encodedDomain}`;
   }
 
+  // Use the current browser origin so WebSocket works through any proxy/tunnel.
+  // In dev with Vite proxy, /ws is forwarded to the NestJS backend automatically.
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${protocol}://localhost:8010/ws?domain=${encodedDomain}`;
+  return `${protocol}://${window.location.host}/ws?domain=${encodedDomain}`;
 }
 
 function resolveHttpUrl(path: string): string {
@@ -27,7 +29,8 @@ function resolveHttpUrl(path: string): string {
   if (fromEnv && fromEnv.trim()) {
     return `${fromEnv.trim().replace(/\/+$/, '')}${path}`;
   }
-  return `http://localhost:8010${path}`;
+  // Use relative paths so requests go through the Vite proxy / any reverse proxy.
+  return path;
 }
 
 export function useRealtimeIvr() {
