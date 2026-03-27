@@ -12,7 +12,6 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var ApiIntegrationService_1;
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApiIntegrationService = void 0;
 const common_1 = require("@nestjs/common");
@@ -249,6 +248,6 @@ exports.ApiIntegrationService = ApiIntegrationService;
 exports.ApiIntegrationService = ApiIntegrationService = ApiIntegrationService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectDataSource)()),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.DataSource !== "undefined" && typeorm_2.DataSource) === "function" ? _a : Object])
+    __metadata("design:paramtypes", [typeorm_2.DataSource])
 ], ApiIntegrationService);
 //# sourceMappingURL=api-integration.service.js.map

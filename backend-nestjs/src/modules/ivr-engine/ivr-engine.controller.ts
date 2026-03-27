@@ -154,7 +154,7 @@ export class IvrEngineController {
       const result = await this.dataSource.query(
         `SELECT f.FlowId, f.DomainId, f.FlowCode, f.FlowName, f.Description, 
                 f.IsEntryFlow, f.FlowVersion, f.IsActive, f.CreatedAt, f.UpdatedAt,
-                d.DomainCode, d.DomainName,
+                d.DomainCode, d.DisplayName as DomainName,
                 (SELECT COUNT(*) FROM IvrFlowNodes n WHERE n.FlowId = f.FlowId) as NodeCount
          FROM IvrFlows f
          JOIN Domains d ON d.DomainId = f.DomainId
@@ -191,19 +191,31 @@ export class IvrEngineController {
       [flowId],
     );
 
-    // Load actions for each node
-    const nodesWithActions = [];
-    for (const node of nodes) {
-      const actions = await this.dataSource.query(
-        `SELECT ActionId, ActionType, ActionOrder, ToolName, EndpointId,
+    // Load all actions for this flow's nodes in a single query
+    const nodeIds = nodes.map((n: any) => `'${n.NodeId}'`).join(',');
+    let allActions: any[] = [];
+    if (nodeIds.length > 0) {
+      allActions = await this.dataSource.query(
+        `SELECT ActionId, NodeId, ActionType, ActionOrder, ToolName, EndpointId,
                 RequestMapping, ResponseMapping, FallbackResponse, IsActive
          FROM IvrNodeActions
-         WHERE NodeId = @0
+         WHERE NodeId IN (${nodeIds})
          ORDER BY ActionOrder`,
-        [node.NodeId],
       );
-      nodesWithActions.push({ ...node, actions });
     }
+
+    // Group actions by NodeId
+    const actionsByNode = new Map<string, any[]>();
+    for (const action of allActions) {
+      const list = actionsByNode.get(action.NodeId) || [];
+      list.push(action);
+      actionsByNode.set(action.NodeId, list);
+    }
+
+    const nodesWithActions = nodes.map((node: any) => ({
+      ...node,
+      actions: actionsByNode.get(node.NodeId) || [],
+    }));
 
     return { ...flow[0], nodes: nodesWithActions };
   }
@@ -421,7 +433,7 @@ export class IvrEngineController {
     }
 
     return this.dataSource.query(
-      `SELECT e.*, d.DomainCode, d.DomainName
+      `SELECT e.*, d.DomainCode, d.DisplayName as DomainName
        FROM DomainApiEndpoints e
        JOIN Domains d ON d.DomainId = e.DomainId
        ORDER BY d.DomainCode, e.EndpointCode`,
@@ -553,7 +565,7 @@ export class IvrEngineController {
     }
 
     return this.dataSource.query(
-      `SELECT TOP (${maxRows}) e.*, d.DomainCode, d.DomainName
+      `SELECT TOP (${maxRows}) e.*, d.DomainCode, d.DisplayName as DomainName
        FROM ErrorLogs e
        LEFT JOIN Domains d ON d.DomainId = e.DomainId
        ORDER BY e.CreatedAt DESC`,

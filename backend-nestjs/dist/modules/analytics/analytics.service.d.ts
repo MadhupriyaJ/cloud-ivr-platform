@@ -9,8 +9,48 @@ export declare class AnalyticsService {
     private readonly agentRepo;
     private readonly escalationRepo;
     constructor(domainRepo: Repository<DomainEntity>, conversationRepo: Repository<ConversationEntity>, agentRepo: Repository<AgentEntity>, escalationRepo: Repository<EscalationEntity>);
-    getOverview(): unknown;
-    getConversationTrends(): unknown;
-    getDomainDistribution(): unknown;
-    getHealth(): unknown;
+    getOverview(): Promise<{
+        domains: {
+            total: number;
+            active: number;
+        };
+        conversations: {
+            total: number;
+            live: number;
+            escalated: number;
+            avgDurationSec: number;
+        };
+        agents: {
+            total: number;
+            available: number;
+            busy: number;
+        };
+        escalations: {
+            total: number;
+            open: number;
+            closed: number;
+        };
+        conversationsByChannel: {
+            channel: string;
+            count: number;
+        }[];
+        conversationsByStatus: {
+            status: string;
+            count: number;
+        }[];
+    }>;
+    getConversationTrends(): Promise<{
+        date: string;
+        count: number;
+    }[]>;
+    getDomainDistribution(): Promise<{
+        domainCode: string;
+        displayName: string;
+        count: number;
+    }[]>;
+    getHealth(): Promise<{
+        status: string;
+        database: string;
+        timestamp: string;
+    }>;
 }

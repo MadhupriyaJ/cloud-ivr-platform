@@ -7,9 +7,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
+const path_1 = require("path");
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
+const serve_static_1 = require("@nestjs/serve-static");
 const app_controller_1 = require("./app.controller");
 const database_config_1 = require("./config/database.config");
 const azure_config_1 = require("./config/azure.config");
@@ -38,6 +40,10 @@ exports.AppModule = AppModule = __decorate([
                 load: [database_config_1.databaseConfig, azure_config_1.azureConfig],
             }),
             typeorm_1.TypeOrmModule.forRootAsync(database_config_1.databaseConfig.asTypeOrmFactory()),
+            serve_static_1.ServeStaticModule.forRoot({
+                rootPath: (0, path_1.join)(__dirname, '..', 'public'),
+                exclude: ['/api{*path}', '/ws{*path}', '/health'],
+            }),
             agents_module_1.AgentsModule,
             conversations_module_1.ConversationsModule,
             domain_module_1.DomainModule,
