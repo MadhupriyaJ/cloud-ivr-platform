@@ -3,11 +3,18 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { EscalationEntity } from './escalation.entity';
 import { EscalationsController } from './escalations.controller';
 import { EscalationsService } from './escalations.service';
+import { EscalationDetectorService } from './escalation-detector.service';
+import { AgentsModule } from '../agents/agents.module';
+import { ConversationsModule } from '../conversations/conversations.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([EscalationEntity])],
+  imports: [
+    TypeOrmModule.forFeature([EscalationEntity]),
+    AgentsModule,
+    ConversationsModule,
+  ],
   controllers: [EscalationsController],
-  providers: [EscalationsService],
-  exports: [EscalationsService],
+  providers: [EscalationsService, EscalationDetectorService],
+  exports: [EscalationsService, EscalationDetectorService],
 })
 export class EscalationsModule {}

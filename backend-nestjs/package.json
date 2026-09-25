@@ -4,12 +4,17 @@
   "private": true,
   "description": "NestJS scaffold for a generic multi-domain realtime IVR platform",
   "scripts": {
+    "dev": "node scripts/dev-all.mjs",
     "start": "node dist/main",
     "start:dev": "nest start --watch",
+    "start:prod": "node dist/main",
     "build": "nest build",
-    "build:frontend": "cd ../typescript/vite && npm install && npm run build && cp -r dist ../backend-nestjs/public",
+    "build:frontend": "node scripts/build-frontend.mjs",
     "build:all": "npm run build:frontend && npm run build",
-    "start:prod": "node dist/main"
+    "start:all": "npm run build:all && node dist/main",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:migrate:all": "node scripts/migrate.mjs ../database/mssql/001_initial_schema.sql ../database/mssql/002_hospital_schema.sql ../database/mssql/003_hospital_seed.sql ../database/mssql/004_escalation_telephony.sql",
+    "test": "npm run build && node test/telephony.test.mjs && node test/escalation-lifecycle.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -25,7 +30,8 @@
     "mssql": "^11.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "typeorm": "^0.3.21"
+    "typeorm": "^0.3.21",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.16",
@@ -33,6 +39,7 @@
     "@nestjs/testing": "^11.0.0",
     "@types/express": "^5.0.6",
     "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   }

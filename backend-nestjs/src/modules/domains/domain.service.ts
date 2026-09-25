@@ -33,6 +33,20 @@ export class DomainService {
     return domain;
   }
 
+  async getById(domainId: string): Promise<DomainEntity> {
+    const domain = await this.domainRepository.findOne({
+      where: {
+        domainId,
+      },
+    });
+
+    if (!domain) {
+      throw new NotFoundException(`Domain '${domainId}' not found.`);
+    }
+
+    return domain;
+  }
+
   async create(payload: CreateDomainDto): Promise<DomainEntity> {
     const entity = this.domainRepository.create(payload);
     return this.domainRepository.save(entity);

@@ -1,9 +1,14 @@
 export type ServerMessage =
   | { type: 'output_audio'; audio: string }
   | { type: 'output_text'; text: string }
-  | { type: 'output_text_done' };
+  | { type: 'output_text_done' }
+  | { type: 'input_transcript'; text: string }
+  | { type: 'escalated'; escalationId: string; status: string }
+  | { type: 'escalation_failed'; text: string };
 
-export type ClientMessage = { type: 'input_audio'; audio: string };
+export type ClientMessage =
+  | { type: 'input_audio'; audio: string }
+  | { type: 'escalate'; reason?: string };
 
 export type IvrStatus = 'idle' | 'connecting' | 'connected';
 
@@ -73,25 +78,133 @@ export type ConversationMessage = {
   createdAt: string;
 };
 
+export type EscalationStatus =
+  | 'pending'
+  | 'queued'
+  | 'assigned'
+  | 'accepted'
+  | 'resolved'
+  | 'abandoned'
+  | 'failed';
+
+export type EscalationPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export type EscalationChannel = 'queue' | 'phone_transfer' | 'callback' | 'webhook';
+
 export type Escalation = {
   escalationId: string;
   conversationId: string;
+  domainId: string | null;
   escalationReason: string;
+  status: EscalationStatus;
+  priority: EscalationPriority;
+  channel: EscalationChannel;
+  queueName: string | null;
+  skillGroup: string | null;
+  callerIdentifier: string | null;
+  callSid: string | null;
+  transferTarget: string | null;
+  contextSummary: string | null;
+  resolutionNotes: string | null;
   escalatedAt: string;
   assignedAgentId: string | null;
+  assignedAt: string | null;
   acceptedAt: string | null;
   closedAt: string | null;
+  updatedAt: string;
 };
+
+export type EscalationStats = {
+  open: number;
+  queued: number;
+  assigned: number;
+  accepted: number;
+  resolvedToday: number;
+  avgWaitSeconds: number;
+  avgHandleSeconds: number;
+};
+
+/** Push payload from the agent-desk websocket (`/ws/agent-desk`). */
+export type EscalationEvent = {
+  type:
+    | 'escalation.created'
+    | 'escalation.assigned'
+    | 'escalation.accepted'
+    | 'escalation.closed'
+    | 'escalation.requeued'
+    | 'agent.presence'
+    | 'connected'
+    | 'ping';
+  at: string;
+  escalation?: Escalation;
+  agent?: { agentId: string; name: string; availabilityStatus: string };
+  message?: string;
+};
+
+export type AgentAvailability = 'available' | 'busy' | 'break' | 'offline';
 
 export type Agent = {
   agentId: string;
   name: string;
   email: string;
   skillGroup: string | null;
-  availabilityStatus: string;
+  availabilityStatus: AgentAvailability;
+  phoneNumber: string | null;
+  activeEscalations: number;
+  maxConcurrent: number;
+  lastSeenAt: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+/* ─── Telephony ─── */
+
+export type PhoneNumberMapping = {
+  phoneNumberId: string;
+  phoneNumber: string;
+  friendlyName: string | null;
+  domainId: string;
+  provider: string;
+  escalationNumber: string | null;
+  escalationSkillGroup: string | null;
+  greetingOverride: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CallSession = {
+  callId: string;
+  callSid: string;
+  conversationId: string | null;
+  domainId: string | null;
+  fromNumber: string | null;
+  toNumber: string | null;
+  direction: string;
+  callStatus: string;
+  escalationId: string | null;
+  startedAt: string;
+  answeredAt: string | null;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  hangupCause: string | null;
+};
+
+export type TelephonyConfig = {
+  provider: string;
+  configured: boolean;
+  signatureValidation: boolean;
+  publicBaseUrl: string;
+  callerId: string | null;
+  fallbackAgentNumber: string | null;
+  defaultDomain: string;
+  webhooks: {
+    incomingCall: string;
+    statusCallback: string;
+    mediaStream: string;
+  };
+  missing: string[];
 };
 
 export type PromptTemplate = {

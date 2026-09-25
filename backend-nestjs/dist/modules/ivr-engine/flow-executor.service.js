@@ -19,15 +19,24 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const ivr_flow_loader_service_1 = require("./ivr-flow-loader.service");
 const api_integration_service_1 = require("./api-integration.service");
+const conversations_service_1 = require("../conversations/conversations.service");
+const domain_service_1 = require("../domains/domain.service");
+const escalations_service_1 = require("../escalations/escalations.service");
 let FlowExecutorService = FlowExecutorService_1 = class FlowExecutorService {
     flowLoader;
     apiIntegration;
+    conversationsService;
+    domainService;
+    escalationsService;
     dataSource;
     logger = new common_1.Logger(FlowExecutorService_1.name);
     sessions = new Map();
-    constructor(flowLoader, apiIntegration, dataSource) {
+    constructor(flowLoader, apiIntegration, conversationsService, domainService, escalationsService, dataSource) {
         this.flowLoader = flowLoader;
         this.apiIntegration = apiIntegration;
+        this.conversationsService = conversationsService;
+        this.domainService = domainService;
+        this.escalationsService = escalationsService;
         this.dataSource = dataSource;
     }
     async startSession(domainCode, sessionId) {
@@ -49,6 +58,18 @@ let FlowExecutorService = FlowExecutorService_1 = class FlowExecutorService {
         };
         this.sessions.set(sid, session);
         this.logger.log(`Session started: ${sid} for domain: ${domainCode}, entry node: ${flow.entryNodeCode}`);
+        try {
+            const domain = await this.domainService.getByCode(domainCode);
+            const conversation = await this.conversationsService.create({
+                domainId: domain.domainId,
+                channelType: 'flow',
+                customerIdentifier: sid,
+            });
+            session.conversationId = conversation.conversationId;
+        }
+        catch (error) {
+            this.logger.warn(`Flow session ${sid} has no conversation record: ${String(error)}`);
+        }
         return this.executeCurrentNode(session);
     }
     async processInput(sessionId, userInput, detectedIntent) {
@@ -232,12 +253,29 @@ let FlowExecutorService = FlowExecutorService_1 = class FlowExecutorService {
     }
     handleTransfer(session, node) {
         session.status = 'transferred';
+        const transferTarget = node.metadataJson?.transferTarget || 'agent';
+        if (session.conversationId) {
+            void this.escalationsService
+                .create({
+                conversationId: session.conversationId,
+                escalationReason: node.metadataJson?.escalationReason ||
+                    `Flow node ${node.nodeCode} transferred the caller to ${transferTarget}`,
+                priority: node.metadataJson?.priority || 'normal',
+                channel: 'queue',
+                skillGroup: node.metadataJson?.skillGroup,
+                contextSummary: this.summarizeHistory(session),
+            })
+                .catch((error) => this.logger.error(`Flow transfer could not create escalation: ${String(error)}`));
+        }
+        else {
+            this.logger.warn(`Flow session ${session.sessionId} transferred without a conversation; no escalation raised.`);
+        }
         const result = {
             nodeCode: node.nodeCode,
             nodeType: node.nodeType,
             promptText: node.promptText || 'Transferring you to an agent.',
             action: 'transfer',
-            data: { transferTarget: node.metadataJson?.transferTarget || 'agent' },
+            data: { transferTarget },
             nextNodeCode: null,
             timestamp: Date.now(),
         };
@@ -257,6 +295,13 @@ let FlowExecutorService = FlowExecutorService_1 = class FlowExecutorService {
         };
         session.history.push(result);
         return result;
+    }
+    summarizeHistory(session) {
+        return session.history
+            .slice(-8)
+            .map((step) => `${step.nodeCode}: ${step.promptText ?? ''}`)
+            .join('\n')
+            .slice(0, 4000);
     }
     advanceToNext(session, currentNode) {
         const result = this.buildPromptResult(session, currentNode);
@@ -319,9 +364,12 @@ let FlowExecutorService = FlowExecutorService_1 = class FlowExecutorService {
 exports.FlowExecutorService = FlowExecutorService;
 exports.FlowExecutorService = FlowExecutorService = FlowExecutorService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(2, (0, typeorm_1.InjectDataSource)()),
+    __param(5, (0, typeorm_1.InjectDataSource)()),
     __metadata("design:paramtypes", [ivr_flow_loader_service_1.IvrFlowLoaderService,
         api_integration_service_1.ApiIntegrationService,
+        conversations_service_1.ConversationsService,
+        domain_service_1.DomainService,
+        escalations_service_1.EscalationsService,
         typeorm_2.DataSource])
 ], FlowExecutorService);
 //# sourceMappingURL=flow-executor.service.js.map

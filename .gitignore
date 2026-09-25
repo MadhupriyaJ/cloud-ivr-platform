@@ -16,7 +16,7 @@ dist/
 
 # Build artifacts
 backend-nestjs/public/
-tyescript/vite/dist/
+typescript/vite/dist/
 
 # OS
 .DS_Store

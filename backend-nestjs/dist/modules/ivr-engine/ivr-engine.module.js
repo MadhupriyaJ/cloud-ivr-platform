@@ -13,11 +13,15 @@ const flow_executor_service_1 = require("./flow-executor.service");
 const api_integration_service_1 = require("./api-integration.service");
 const ivr_engine_controller_1 = require("./ivr-engine.controller");
 const mock_api_controller_1 = require("./mock-api.controller");
+const conversations_module_1 = require("../conversations/conversations.module");
+const domain_module_1 = require("../domains/domain.module");
+const escalations_module_1 = require("../escalations/escalations.module");
 let IvrEngineModule = class IvrEngineModule {
 };
 exports.IvrEngineModule = IvrEngineModule;
 exports.IvrEngineModule = IvrEngineModule = __decorate([
     (0, common_1.Module)({
+        imports: [conversations_module_1.ConversationsModule, domain_module_1.DomainModule, escalations_module_1.EscalationsModule],
         controllers: [ivr_engine_controller_1.IvrEngineController, mock_api_controller_1.MockApiController],
         providers: [
             ivr_flow_loader_service_1.IvrFlowLoaderService,

@@ -21,6 +21,8 @@ const domain_module_1 = require("./modules/domains/domain.module");
 const domain_intents_module_1 = require("./modules/domain-intents/domain-intents.module");
 const domain_rules_module_1 = require("./modules/domain-rules/domain-rules.module");
 const escalations_module_1 = require("./modules/escalations/escalations.module");
+const escalation_events_module_1 = require("./modules/escalations/escalation-events.module");
+const telephony_module_1 = require("./modules/telephony/telephony.module");
 const prompt_templates_module_1 = require("./modules/prompt-templates/prompt-templates.module");
 const realtime_module_1 = require("./modules/realtime/realtime.module");
 const speech_module_1 = require("./modules/speech/speech.module");
@@ -46,6 +48,7 @@ exports.AppModule = AppModule = __decorate([
                 exclude: ['/api{*path}', '/ws{*path}', '/health'],
             }),
             cache_module_1.AppCacheModule,
+            escalation_events_module_1.EscalationEventsModule,
             agents_module_1.AgentsModule,
             conversations_module_1.ConversationsModule,
             domain_module_1.DomainModule,
@@ -59,6 +62,7 @@ exports.AppModule = AppModule = __decorate([
             hospital_module_1.HospitalModule,
             analytics_module_1.AnalyticsModule,
             ivr_engine_module_1.IvrEngineModule,
+            telephony_module_1.TelephonyModule,
         ],
         controllers: [app_controller_1.AppController],
     })

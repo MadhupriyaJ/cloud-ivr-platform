@@ -7,8 +7,7 @@ services:
     rootDir: backend-nestjs
     buildCommand: |
       npm install
-      cd ../typescript/vite && npm install && npm run build && cp -r dist ../backend-nestjs/public
-      cd ../backend-nestjs && npx nest build
+      npm run build:all
     startCommand: node dist/main.js
     healthCheckPath: /api/analytics/health
     envVars:
@@ -41,6 +40,21 @@ services:
       - key: AZURE_SPEECH_API_KEY
         sync: false
       - key: AZURE_COMMUNICATION_CONNECTION_STRING
+        sync: false
+      # Telephony: inbound phone number -> IVR, and live escalation transfers.
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_CALLER_ID
+        sync: false
+      - key: VALIDATE_TWILIO_SIGNATURE
+        value: true
+      - key: TELEPHONY_DEFAULT_DOMAIN
+        value: hospital
+      - key: TELEPHONY_FALLBACK_AGENT_NUMBER
         sync: false
       - key: VITE_BACKEND_HTTP_URL
         fromService:

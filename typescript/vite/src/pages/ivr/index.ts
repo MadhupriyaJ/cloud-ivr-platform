@@ -11,3 +11,5 @@ export * from './IvrFlowDetailPage';
 export * from './ApiEndpointsPage';
 export * from './IvrSimulatorPage';
 export * from './IvrSessionsPage';
+export * from './EscalationConsolePage';
+export * from './TelephonyPage';

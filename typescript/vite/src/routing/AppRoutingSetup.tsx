@@ -90,7 +90,9 @@ import {
   IvrFlowDetailPage,
   ApiEndpointsPage,
   IvrSimulatorPage,
-  IvrSessionsPage
+  IvrSessionsPage,
+  EscalationConsolePage,
+  TelephonyPage
 } from '@/pages/ivr';
 import { N8N_IVR_BUILDER_ENABLED, N8N_IVR_BUILDER_PATH } from '@/config/ivr-builder.config';
 
@@ -119,6 +121,8 @@ const AppRoutingSetup = (): ReactElement => {
           <Route path="/ivr/intents-rules" element={<IntentsRulesPage />} />
           <Route path="/ivr/conversations" element={<ConversationsPage />} />
           <Route path="/ivr/escalations" element={<EscalationsPage />} />
+          <Route path="/ivr/escalation-console" element={<EscalationConsolePage />} />
+          <Route path="/ivr/telephony" element={<TelephonyPage />} />
           <Route path="/ivr/agents" element={<AgentsPage />} />
           <Route path="/ivr/prompts-tools" element={<PromptsToolsPage />} />
           <Route path="/ivr/hospital" element={<HospitalWorkspacePage />} />

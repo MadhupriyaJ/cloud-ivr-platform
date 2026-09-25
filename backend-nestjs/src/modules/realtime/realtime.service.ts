@@ -146,7 +146,7 @@ export class RealtimeService {
 
   async startSession(
     clientId: string,
-    payload: { domainCode: string; customerIdentifier?: string },
+    payload: { domainCode: string; customerIdentifier?: string; channelType?: string },
   ): Promise<{
     ok: true;
     session: ActiveSession;
@@ -170,7 +170,7 @@ export class RealtimeService {
     );
     const conversation = await this.conversationsService.create({
       domainId: domain.domainId,
-      channelType: 'websocket',
+      channelType: payload.channelType || 'websocket',
       customerIdentifier: payload.customerIdentifier,
     });
 
@@ -220,6 +220,27 @@ export class RealtimeService {
     // 4. execute tools only if allowed by domain config
     void audioBase64;
     return { accepted: true };
+  }
+
+  /** Persist a caller utterance transcript against the live conversation. */
+  async recordCallerText(clientId: string, text: string): Promise<void> {
+    const session = this.sessions.get(clientId);
+    if (!session || !text.trim()) {
+      return;
+    }
+
+    await this.conversationsService.addMessage({
+      conversationId: session.conversationId,
+      speakerType: 'customer',
+      messageType: 'text',
+      messageText: text.trim(),
+      sequenceNo: session.nextSequenceNo++,
+    });
+  }
+
+  /** The conversation row backing a live client session, if any. */
+  getSession(clientId: string): ActiveSession | undefined {
+    return this.sessions.get(clientId);
   }
 
   async recordAssistantText(clientId: string, text: string): Promise<void> {

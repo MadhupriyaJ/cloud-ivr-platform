@@ -394,6 +394,12 @@ export function useRealtimeIvr() {
         } else if (message.type === 'output_text') {
           aiLiveTextRef.current += message.text;
           upsertLiveLog('AI', aiLiveTextRef.current);
+        } else if (message.type === 'escalated') {
+          appendLog(
+            `Escalated to a human agent (${message.status}). Reference ${message.escalationId.slice(0, 8)}.`
+          );
+        } else if (message.type === 'escalation_failed') {
+          appendLog(`Escalation failed: ${message.text}`);
         } else if (message.type === 'output_text_done') {
           const finalText = aiLiveTextRef.current.trim();
           if (finalText) {
@@ -517,6 +523,25 @@ export function useRealtimeIvr() {
 
   const clearLogs = useCallback(() => setLogs([]), []);
 
+  /** Hand the live browser session to a human agent. */
+  const escalate = useCallback(
+    (reason?: string) => {
+      const socket = wsRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        appendLog('Start a session before requesting an agent.');
+        return;
+      }
+      socket.send(
+        JSON.stringify({
+          type: 'escalate',
+          reason: reason || 'Caller requested a human agent'
+        })
+      );
+      appendLog('Requesting a human agent...');
+    },
+    [appendLog]
+  );
+
   return {
     status,
     logs,
@@ -524,6 +549,7 @@ export function useRealtimeIvr() {
     setAvatarVideoElement,
     start,
     startScriptedSession,
+    escalate,
     stop,
     clearLogs
   };

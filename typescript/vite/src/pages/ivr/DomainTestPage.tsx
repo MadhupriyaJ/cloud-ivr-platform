@@ -63,6 +63,7 @@ const DomainTestPage = () => {
     setAvatarVideoElement,
     start,
     startScriptedSession,
+    escalate,
     stop,
     clearLogs
   } =
@@ -600,6 +601,15 @@ const DomainTestPage = () => {
             >
               <KeenIcon icon="phone" className="me-2" />
               {isHospitalDomain ? 'Start Hospital IVR with Avatar' : 'Start Session with Avatar'}
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={() => escalate('Caller requested a human agent from the test console')}
+              disabled={status !== 'connected'}
+              title="Raise an escalation for this session and route it to an available agent"
+            >
+              <KeenIcon icon="user-tick" className="me-2" />
+              Talk to a Human
             </button>
             <button className="btn btn-warning" onClick={stop} disabled={status === 'idle'}>
               <KeenIcon icon="cross-circle" className="me-2" />

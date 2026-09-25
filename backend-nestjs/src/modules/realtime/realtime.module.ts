@@ -16,5 +16,6 @@ import { RealtimeService } from './realtime.service';
     PromptTemplatesModule,
   ],
   providers: [RealtimeGateway, RealtimeService],
+  exports: [RealtimeService],
 })
 export class RealtimeModule {}

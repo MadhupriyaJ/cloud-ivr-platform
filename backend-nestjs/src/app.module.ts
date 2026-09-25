@@ -12,6 +12,8 @@ import { DomainModule } from './modules/domains/domain.module';
 import { DomainIntentsModule } from './modules/domain-intents/domain-intents.module';
 import { DomainRulesModule } from './modules/domain-rules/domain-rules.module';
 import { EscalationsModule } from './modules/escalations/escalations.module';
+import { EscalationEventsModule } from './modules/escalations/escalation-events.module';
+import { TelephonyModule } from './modules/telephony/telephony.module';
 import { PromptTemplatesModule } from './modules/prompt-templates/prompt-templates.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SpeechModule } from './modules/speech/speech.module';
@@ -34,6 +36,7 @@ import { AppCacheModule } from './common/cache.module';
       exclude: ['/api{*path}', '/ws{*path}', '/health'],
     }),
     AppCacheModule,
+    EscalationEventsModule,
     AgentsModule,
     ConversationsModule,
     DomainModule,
@@ -47,6 +50,7 @@ import { AppCacheModule } from './common/cache.module';
     HospitalModule,
     AnalyticsModule,
     IvrEngineModule,
+    TelephonyModule,
   ],
   controllers: [AppController],
 })

@@ -31,6 +31,14 @@ export const MENU_SIDEBAR: TMenuConfig = [
         path: '/ivr/escalations'
       },
       {
+        title: 'Escalation Console',
+        path: '/ivr/escalation-console'
+      },
+      {
+        title: 'Telephony',
+        path: '/ivr/telephony'
+      },
+      {
         title: 'Agents',
         path: '/ivr/agents'
       },

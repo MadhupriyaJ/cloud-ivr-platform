@@ -3,6 +3,9 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { IvrFlowLoaderService, LoadedFlow, IvrFlowNode, DomainApiEndpoint } from './ivr-flow-loader.service';
 import { ApiIntegrationService, ApiCallResult } from './api-integration.service';
+import { ConversationsService } from '../conversations/conversations.service';
+import { DomainService } from '../domains/domain.service';
+import { EscalationsService } from '../escalations/escalations.service';
 
 /**
  * FlowExecutorService
@@ -23,6 +26,8 @@ export interface FlowSession {
   history: FlowStepResult[];
   status: 'active' | 'completed' | 'transferred' | 'error';
   startedAt: number;
+  /** Conversation row backing this flow session, when the DB accepted one. */
+  conversationId?: string;
 }
 
 export interface FlowStepResult {
@@ -45,6 +50,9 @@ export class FlowExecutorService {
   constructor(
     private readonly flowLoader: IvrFlowLoaderService,
     private readonly apiIntegration: ApiIntegrationService,
+    private readonly conversationsService: ConversationsService,
+    private readonly domainService: DomainService,
+    private readonly escalationsService: EscalationsService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -75,6 +83,20 @@ export class FlowExecutorService {
 
     this.sessions.set(sid, session);
     this.logger.log(`Session started: ${sid} for domain: ${domainCode}, entry node: ${flow.entryNodeCode}`);
+
+    // Back the flow session with a conversation row so transfers can raise a
+    // real escalation and land in the agent console like any other channel.
+    try {
+      const domain = await this.domainService.getByCode(domainCode);
+      const conversation = await this.conversationsService.create({
+        domainId: domain.domainId,
+        channelType: 'flow',
+        customerIdentifier: sid,
+      });
+      session.conversationId = conversation.conversationId;
+    } catch (error) {
+      this.logger.warn(`Flow session ${sid} has no conversation record: ${String(error)}`);
+    }
 
     // Execute the entry node
     return this.executeCurrentNode(session);
@@ -368,12 +390,37 @@ export class FlowExecutorService {
   private handleTransfer(session: FlowSession, node: IvrFlowNode): FlowStepResult {
     session.status = 'transferred';
 
+    const transferTarget = node.metadataJson?.transferTarget || 'agent';
+
+    // Raising the escalation is fire-and-forget: the caller hears the transfer
+    // prompt immediately while routing happens behind it.
+    if (session.conversationId) {
+      void this.escalationsService
+        .create({
+          conversationId: session.conversationId,
+          escalationReason:
+            node.metadataJson?.escalationReason ||
+            `Flow node ${node.nodeCode} transferred the caller to ${transferTarget}`,
+          priority: node.metadataJson?.priority || 'normal',
+          channel: 'queue',
+          skillGroup: node.metadataJson?.skillGroup,
+          contextSummary: this.summarizeHistory(session),
+        })
+        .catch((error) =>
+          this.logger.error(`Flow transfer could not create escalation: ${String(error)}`),
+        );
+    } else {
+      this.logger.warn(
+        `Flow session ${session.sessionId} transferred without a conversation; no escalation raised.`,
+      );
+    }
+
     const result: FlowStepResult = {
       nodeCode: node.nodeCode,
       nodeType: node.nodeType,
       promptText: node.promptText || 'Transferring you to an agent.',
       action: 'transfer',
-      data: { transferTarget: node.metadataJson?.transferTarget || 'agent' },
+      data: { transferTarget },
       nextNodeCode: null,
       timestamp: Date.now(),
     };
@@ -400,6 +447,15 @@ export class FlowExecutorService {
 
     session.history.push(result);
     return result;
+  }
+
+  /** Compact transcript of the flow so far, handed to the agent on transfer. */
+  private summarizeHistory(session: FlowSession): string {
+    return session.history
+      .slice(-8)
+      .map((step) => `${step.nodeCode}: ${step.promptText ?? ''}`)
+      .join('\n')
+      .slice(0, 4000);
   }
 
   /**

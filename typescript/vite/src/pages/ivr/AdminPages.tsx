@@ -1427,7 +1427,12 @@ const EscalationsPage = () => {
                     <td className="font-mono text-xs">{item.conversationId.slice(0, 8)}</td>
                     <td>{item.escalationReason}</td>
                     <td>{agents.find((agent) => agent.agentId === item.assignedAgentId)?.name || '-'}</td>
-                    <td>{item.closedAt ? 'Closed' : item.acceptedAt ? 'Accepted' : 'Open'}</td>
+                    <td>
+                      <span className="badge badge-sm badge-light">{item.status}</span>
+                      {item.priority !== 'normal' && (
+                        <span className="ms-1 badge badge-sm badge-warning">{item.priority}</span>
+                      )}
+                    </td>
                     <td>{formatDateTime(item.escalatedAt)}</td>
                   </tr>
                 ))}
@@ -1451,6 +1456,8 @@ const AgentsPage = () => {
     email: '',
     skillGroup: '',
     availabilityStatus: 'offline',
+    phoneNumber: '',
+    maxConcurrent: 1,
     isActive: true
   });
 
@@ -1480,9 +1487,19 @@ const AgentsPage = () => {
         email: form.email,
         skillGroup: form.skillGroup || undefined,
         availabilityStatus: form.availabilityStatus,
+        phoneNumber: form.phoneNumber || undefined,
+        maxConcurrent: form.maxConcurrent,
         isActive: form.isActive
       });
-      setForm({ name: '', email: '', skillGroup: '', availabilityStatus: 'offline', isActive: true });
+      setForm({
+        name: '',
+        email: '',
+        skillGroup: '',
+        availabilityStatus: 'offline',
+        phoneNumber: '',
+        maxConcurrent: 1,
+        isActive: true
+      });
       setToast({ kind: 'success', text: 'Agent created.' });
       await load();
     } catch (error) {
@@ -1513,10 +1530,28 @@ const AgentsPage = () => {
             <input className="input" value={form.name} placeholder="Name" onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
             <input className="input" value={form.email} placeholder="Email" onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} />
             <input className="input" value={form.skillGroup} placeholder="Skill group" onChange={(event) => setForm((prev) => ({ ...prev, skillGroup: event.target.value }))} />
+            <input
+              className="input"
+              value={form.phoneNumber}
+              placeholder="Direct dial for call transfers (+14155550123)"
+              onChange={(event) => setForm((prev) => ({ ...prev, phoneNumber: event.target.value }))}
+            />
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={20}
+              value={form.maxConcurrent}
+              placeholder="Concurrent escalations"
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, maxConcurrent: Number(event.target.value) || 1 }))
+              }
+            />
             <select className="select" value={form.availabilityStatus} onChange={(event) => setForm((prev) => ({ ...prev, availabilityStatus: event.target.value }))}>
               <option value="offline">Offline</option>
               <option value="available">Available</option>
               <option value="busy">Busy</option>
+              <option value="break">On break</option>
             </select>
             <label className="checkbox-group">
               <input type="checkbox" checked={form.isActive} onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.checked }))} />
@@ -1539,18 +1574,36 @@ const AgentsPage = () => {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Skill Group</th>
+                  <th>Direct dial</th>
+                  <th>Load</th>
                   <th>Status</th>
                   <th>Updated</th>
                 </tr>
               </thead>
               <tbody>
-                {agents.length === 0 && <EmptyRow colSpan={5} text={busy ? 'Loading agents...' : 'No agents found.'} />}
+                {agents.length === 0 && <EmptyRow colSpan={7} text={busy ? 'Loading agents...' : 'No agents found.'} />}
                 {agents.map((item) => (
                   <tr key={item.agentId}>
                     <td>{item.name}</td>
                     <td>{item.email}</td>
                     <td>{item.skillGroup || '-'}</td>
-                    <td>{item.availabilityStatus}</td>
+                    <td className="text-xs">{item.phoneNumber || '-'}</td>
+                    <td className="text-xs">
+                      {item.activeEscalations ?? 0}/{item.maxConcurrent ?? 1}
+                    </td>
+                    <td>
+                      <span
+                        className={`badge badge-sm ${
+                          item.availabilityStatus === 'available'
+                            ? 'badge-success'
+                            : item.availabilityStatus === 'busy'
+                              ? 'badge-warning'
+                              : 'badge-light'
+                        }`}
+                      >
+                        {item.availabilityStatus}
+                      </span>
+                    </td>
                     <td>{formatDateTime(item.updatedAt)}</td>
                   </tr>
                 ))}

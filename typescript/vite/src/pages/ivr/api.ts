@@ -6,7 +6,9 @@ import type {
   DomainIntent,
   DomainPayload,
   DomainRule,
+  CallSession,
   Escalation,
+  EscalationStats,
   HospitalAppointment,
   HospitalBilling,
   HospitalDepartment,
@@ -14,7 +16,9 @@ import type {
   HospitalLabReport,
   HospitalPatient,
   HospitalSchedule,
+  PhoneNumberMapping,
   PromptTemplate,
+  TelephonyConfig,
   ToolDefinition
 } from './types';
 import { cachedFetch, invalidateCachePrefix } from './apiCache';
@@ -199,14 +203,36 @@ export async function fetchConversationMessages(
   );
 }
 
-export async function fetchEscalations(): Promise<Escalation[]> {
-  return fetchItems<Escalation>('/api/escalations');
+/* ─── Escalations ─── */
+
+export async function fetchEscalations(args?: {
+  status?: 'open' | 'all' | Escalation['status'];
+  agentId?: string;
+  conversationId?: string;
+  limit?: number;
+}): Promise<Escalation[]> {
+  const params = new URLSearchParams();
+  if (args?.status) params.set('status', args.status);
+  if (args?.agentId) params.set('agentId', args.agentId);
+  if (args?.conversationId) params.set('conversationId', args.conversationId);
+  if (args?.limit) params.set('limit', String(args.limit));
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return fetchItems<Escalation>(`/api/escalations${suffix}`);
+}
+
+export async function fetchEscalationStats(): Promise<EscalationStats> {
+  return fetchJson<EscalationStats>('/api/escalations/stats');
 }
 
 export async function createEscalation(payload: {
   conversationId: string;
   escalationReason: string;
   assignedAgentId?: string;
+  priority?: Escalation['priority'];
+  channel?: Escalation['channel'];
+  skillGroup?: string;
+  callerIdentifier?: string;
+  contextSummary?: string;
 }): Promise<Escalation> {
   return fetchJson<Escalation>('/api/escalations', {
     method: 'POST',
@@ -215,8 +241,63 @@ export async function createEscalation(payload: {
   });
 }
 
+export async function assignEscalation(escalationId: string, agentId: string): Promise<Escalation> {
+  return fetchJson<Escalation>(`/api/escalations/${encodeURIComponent(escalationId)}/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId })
+  });
+}
+
+export async function acceptEscalation(escalationId: string, agentId?: string): Promise<Escalation> {
+  return fetchJson<Escalation>(`/api/escalations/${encodeURIComponent(escalationId)}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(agentId ? { agentId } : {})
+  });
+}
+
+export async function closeEscalation(
+  escalationId: string,
+  payload?: { outcome?: 'resolved' | 'abandoned' | 'failed'; resolutionNotes?: string }
+): Promise<Escalation> {
+  return fetchJson<Escalation>(`/api/escalations/${encodeURIComponent(escalationId)}/close`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload ?? {})
+  });
+}
+
+export async function requeueEscalation(escalationId: string, reason?: string): Promise<Escalation> {
+  return fetchJson<Escalation>(`/api/escalations/${encodeURIComponent(escalationId)}/requeue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reason ? { reason } : {})
+  });
+}
+
+/** Websocket URL for the live escalation feed consumed by the agent console. */
+export function agentDeskSocketUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const configured = import.meta.env.DEV
+    ? ''
+    : ((import.meta.env.VITE_BACKEND_WS_URL as string | undefined) || '').trim();
+  if (configured) {
+    return `${configured.replace(/\/$/, '').replace(/^http/, 'ws')}/ws/agent-desk`;
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${protocol}://${window.location.host}/ws/agent-desk`;
+}
+
+/* ─── Agents ─── */
+
 export async function fetchAgents(): Promise<Agent[]> {
-  return cachedFetch('agents:list', () => fetchItems<Agent>('/api/agents'), 60_000);
+  return cachedFetch('agents:list', () => fetchItems<Agent>('/api/agents'), 15_000);
+}
+
+export async function fetchAvailableAgents(skillGroup?: string): Promise<Agent[]> {
+  const suffix = skillGroup ? `?skillGroup=${encodeURIComponent(skillGroup)}` : '';
+  return fetchItems<Agent>(`/api/agents/available${suffix}`);
 }
 
 export async function createAgent(payload: {
@@ -224,13 +305,108 @@ export async function createAgent(payload: {
   email: string;
   skillGroup?: string;
   availabilityStatus?: string;
+  phoneNumber?: string;
+  maxConcurrent?: number;
   isActive?: boolean;
 }): Promise<Agent> {
-  return fetchJson<Agent>('/api/agents', {
+  const agent = await fetchJson<Agent>('/api/agents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+  invalidateCachePrefix('agents:');
+  return agent;
+}
+
+export async function updateAgent(
+  agentId: string,
+  payload: {
+    name?: string;
+    skillGroup?: string;
+    availabilityStatus?: Agent['availabilityStatus'];
+    phoneNumber?: string;
+    maxConcurrent?: number;
+    isActive?: boolean;
+  }
+): Promise<Agent> {
+  const agent = await fetchJson<Agent>(`/api/agents/${encodeURIComponent(agentId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  invalidateCachePrefix('agents:');
+  return agent;
+}
+
+export async function setAgentAvailability(
+  agentId: string,
+  availabilityStatus: Agent['availabilityStatus']
+): Promise<Agent> {
+  const agent = await fetchJson<Agent>(`/api/agents/${encodeURIComponent(agentId)}/availability`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ availabilityStatus })
+  });
+  invalidateCachePrefix('agents:');
+  return agent;
+}
+
+/* ─── Telephony ─── */
+
+export async function fetchTelephonyConfig(): Promise<TelephonyConfig> {
+  return fetchJson<TelephonyConfig>('/api/telephony/config');
+}
+
+export async function fetchPhoneNumbers(): Promise<PhoneNumberMapping[]> {
+  return fetchItems<PhoneNumberMapping>('/api/telephony/numbers');
+}
+
+export async function createPhoneNumber(payload: {
+  phoneNumber: string;
+  domainId: string;
+  friendlyName?: string;
+  escalationNumber?: string;
+  escalationSkillGroup?: string;
+  greetingOverride?: string;
+  isActive?: boolean;
+}): Promise<PhoneNumberMapping> {
+  return fetchJson<PhoneNumberMapping>('/api/telephony/numbers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updatePhoneNumber(
+  phoneNumberId: string,
+  payload: Partial<{
+    phoneNumber: string;
+    domainId: string;
+    friendlyName: string;
+    escalationNumber: string;
+    escalationSkillGroup: string;
+    greetingOverride: string;
+    isActive: boolean;
+  }>
+): Promise<PhoneNumberMapping> {
+  return fetchJson<PhoneNumberMapping>(
+    `/api/telephony/numbers/${encodeURIComponent(phoneNumberId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function deletePhoneNumber(phoneNumberId: string): Promise<void> {
+  await fetchJson(`/api/telephony/numbers/${encodeURIComponent(phoneNumberId)}`, {
+    method: 'DELETE'
+  });
+}
+
+export async function fetchCallSessions(limit = 100): Promise<CallSession[]> {
+  return fetchItems<CallSession>(`/api/telephony/calls?limit=${limit}`);
 }
 
 export async function fetchPromptTemplates(domainUuid: string): Promise<PromptTemplate[]> {

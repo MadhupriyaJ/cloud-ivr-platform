@@ -4,6 +4,9 @@ import { FlowExecutorService } from './flow-executor.service';
 import { ApiIntegrationService } from './api-integration.service';
 import { IvrEngineController } from './ivr-engine.controller';
 import { MockApiController } from './mock-api.controller';
+import { ConversationsModule } from '../conversations/conversations.module';
+import { DomainModule } from '../domains/domain.module';
+import { EscalationsModule } from '../escalations/escalations.module';
 
 /**
  * IvrEngineModule
@@ -18,6 +21,7 @@ import { MockApiController } from './mock-api.controller';
  * - IvrEngineController: REST endpoints for flow management and execution
  */
 @Module({
+  imports: [ConversationsModule, DomainModule, EscalationsModule],
   controllers: [IvrEngineController, MockApiController],
   providers: [
     IvrFlowLoaderService,

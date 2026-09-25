@@ -32,10 +32,12 @@ export class AnalyticsService {
     const escalatedConversations = conversations.filter((c) => c.escalatedToAgent).length;
     const openEscalations = escalations.filter((e) => !e.closedAt).length;
     const closedEscalations = escalations.filter((e) => e.closedAt).length;
-    const availableAgents = agents.filter((a) => a.isActive).length;
-    const busyAgents = agents.filter(
-      (a) => a.availabilityStatus === 'busy' || a.availabilityStatus === 'on_call',
+    // Presence is tracked per agent, so "available" means ready for work rather
+    // than merely enabled.
+    const availableAgents = agents.filter(
+      (a) => a.isActive && a.availabilityStatus === 'available',
     ).length;
+    const busyAgents = agents.filter((a) => a.availabilityStatus === 'busy').length;
 
     // Conversation by channel
     const channelMap = new Map<string, number>();

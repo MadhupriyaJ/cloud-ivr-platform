@@ -76,6 +76,25 @@ VITE_BACKEND_WS_URL=ws://localhost:8010/ws
 VITE_BACKEND_HTTP_URL=http://localhost:8010
 ```
 
+
+## Phone Calls and Escalation
+
+The NestJS backend (`backend-nestjs/`) now answers real phone numbers and hands callers
+to human agents. See [docs/TELEPHONY_AND_ESCALATION.md](docs/TELEPHONY_AND_ESCALATION.md)
+for setup, the call flow and the API reference.
+
+Quick start:
+
+```powershell
+cd backend-nestjs
+npm install
+npm run db:migrate      # adds escalation lifecycle + telephony tables
+npm run start:dev
+```
+
+Then open `Common IVR -> Telephony` to map a number to a domain, and
+`Common IVR -> Escalation Console` to work the queue.
+
 ## Developer Notes
 
 - Audio capture/playback is PCM16 on both frontend and backend.

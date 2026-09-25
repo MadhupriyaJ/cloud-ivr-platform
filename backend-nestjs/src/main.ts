@@ -3,8 +3,18 @@ import { ValidationPipe } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { AppModule } from './app.module';
 import { RealtimeService } from './modules/realtime/realtime.service';
+import { TelephonyBridgeService } from './modules/telephony/telephony-bridge.service';
+import { EscalationEventsService } from './modules/escalations/escalation-events.service';
+import { EscalationsService } from './modules/escalations/escalations.service';
 
 const { WebSocket, WebSocketServer } = require('ws');
+
+/** Websocket paths this process serves directly (socket.io handles its own). */
+const WS_PATH_STUDIO = '/ws';
+const WS_PATH_AGENT_DESK = '/ws/agent-desk';
+const WS_PATH_TELEPHONY = '/telephony/media';
+/** engine.io transport path; the Nest socket.io gateway handles these itself. */
+const WS_PATH_SOCKET_IO = '/socket.io';
 
 function candidateWsBases(endpoint: string): string[] {
   const trimmed = endpoint.replace(/\/+$/, '');
@@ -84,22 +94,47 @@ async function bootstrap() {
   });
 
   const realtimeService = app.get(RealtimeService);
+  const telephonyBridge = app.get(TelephonyBridgeService);
+  const escalationEvents = app.get(EscalationEventsService);
+  const escalationsService = app.get(EscalationsService);
   const httpServer = app.getHttpServer();
-  const rawWss = new WebSocketServer({ noServer: true });
+
+  const studioWss = new WebSocketServer({ noServer: true });
+  const agentDeskWss = new WebSocketServer({ noServer: true });
+  const telephonyWss = new WebSocketServer({ noServer: true });
 
   httpServer.on('upgrade', (request: any, socket: any, head: any) => {
     const url = new URL(request.url || '/', 'http://localhost');
-    if (url.pathname !== '/ws') {
-      socket.destroy();
+    const pathname = url.pathname.replace(/\/+$/, '') || '/';
+
+    const target =
+      pathname === WS_PATH_STUDIO
+        ? studioWss
+        : pathname === WS_PATH_AGENT_DESK
+          ? agentDeskWss
+          : pathname === WS_PATH_TELEPHONY
+            ? telephonyWss
+            : null;
+
+    if (!target) {
+      // socket.io handshakes arrive on its transport path (/socket.io/...), not
+      // on the gateway's namespace, and engine.io installs its own upgrade
+      // listener. Leave those alone — destroying them here, as this handler
+      // used to, killed every socket.io connection before it was established.
+      if (!pathname.startsWith(WS_PATH_SOCKET_IO)) {
+        socket.destroy();
+      }
       return;
     }
 
-    rawWss.handleUpgrade(request, socket, head, (ws: any) => {
-      rawWss.emit('connection', ws, request);
+    target.handleUpgrade(request, socket, head, (ws: any) => {
+      target.emit('connection', ws, request);
     });
   });
 
-  rawWss.on('connection', async (ws: any, request: any) => {
+  /* ───────────────────────── Browser IVR studio ───────────────────────── */
+
+  studioWss.on('connection', async (ws: any, request: any) => {
     const clientId = randomUUID();
     const url = new URL(request.url || '/', 'http://localhost');
     const domainCode = (url.searchParams.get('domain') || 'general').trim().toLowerCase();
@@ -194,6 +229,15 @@ async function bootstrap() {
             return;
           }
 
+          if (type === 'conversation.item.input_audio_transcription.completed' && message.transcript) {
+            // Keep the browser session transcript in the conversation log so an
+            // escalated web chat reaches the agent with the same context a call
+            // would have.
+            await realtimeService.recordCallerText(clientId, String(message.transcript));
+            safeSend(ws, { type: 'input_transcript', text: String(message.transcript) });
+            return;
+          }
+
           if (type === 'response.done') {
             if (assistantText.trim()) {
               await realtimeService.recordAssistantText(clientId, assistantText);
@@ -231,6 +275,7 @@ async function bootstrap() {
     ws.on('message', async (payload: any) => {
       try {
         const message = JSON.parse(payload.toString());
+
         if (message.type === 'input_audio' && message.audio) {
           await realtimeService.handleAudioChunk(clientId, message.audio);
           if (realtimeWs && realtimeWs.readyState === WebSocket.OPEN) {
@@ -241,6 +286,27 @@ async function bootstrap() {
               }),
             );
           }
+          return;
+        }
+
+        // Caller-initiated handover from the browser client ("talk to a human").
+        if (message.type === 'escalate') {
+          const session = realtimeService.getSession(clientId);
+          if (!session) {
+            safeSend(ws, { type: 'escalation_failed', text: 'No active session to escalate.' });
+            return;
+          }
+          const escalation = await escalationsService.create({
+            conversationId: session.conversationId,
+            escalationReason: String(message.reason || 'Caller requested a human agent'),
+            priority: 'high',
+            channel: 'queue',
+          });
+          safeSend(ws, {
+            type: 'escalated',
+            escalationId: escalation.escalationId,
+            status: escalation.status,
+          });
         }
       } catch {
         safeSend(ws, { type: 'output_text', text: 'Invalid websocket message.' });
@@ -254,8 +320,47 @@ async function bootstrap() {
     });
   });
 
+  /* ───────────────────── Agent desk (escalation console) ───────────────────── */
+
+  agentDeskWss.on('connection', (ws: any) => {
+    const subscriberId = randomUUID();
+    const unsubscribe = escalationEvents.subscribe(subscriberId, (event) => {
+      safeSend(ws, event);
+    });
+
+    safeSend(ws, { type: 'connected', at: new Date().toISOString(), subscriberId });
+
+    // Keep intermediaries from dropping an idle console overnight.
+    const heartbeat = setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      safeSend(ws, { type: 'ping', at: new Date().toISOString() });
+    }, 25_000);
+
+    const teardown = () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    };
+
+    ws.on('error', teardown);
+    ws.on('close', teardown);
+  });
+
+  /* ───────────────────────── Twilio media stream ───────────────────────── */
+
+  telephonyWss.on('connection', (ws: any, request: any) => {
+    const clientId = randomUUID();
+    const url = new URL(request.url || '/', 'http://localhost');
+    void telephonyBridge.handleConnection(ws, clientId, url.searchParams).catch((error: any) => {
+      console.error(`Telephony bridge failed [${clientId}]:`, error?.message || error);
+      safeClose(ws);
+    });
+  });
+
   await app.listen(port, host);
   console.log(`NestJS IVR backend running on http://${host}:${port}`);
+  console.log(`  browser IVR websocket   ws://${host}:${port}${WS_PATH_STUDIO}`);
+  console.log(`  agent desk websocket    ws://${host}:${port}${WS_PATH_AGENT_DESK}`);
+  console.log(`  telephony media stream  ws://${host}:${port}${WS_PATH_TELEPHONY}`);
 }
 
 void bootstrap();

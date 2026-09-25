@@ -5,7 +5,14 @@ const common_1 = require("@nestjs/common");
 const crypto_1 = require("crypto");
 const app_module_1 = require("./app.module");
 const realtime_service_1 = require("./modules/realtime/realtime.service");
+const telephony_bridge_service_1 = require("./modules/telephony/telephony-bridge.service");
+const escalation_events_service_1 = require("./modules/escalations/escalation-events.service");
+const escalations_service_1 = require("./modules/escalations/escalations.service");
 const { WebSocket, WebSocketServer } = require('ws');
+const WS_PATH_STUDIO = '/ws';
+const WS_PATH_AGENT_DESK = '/ws/agent-desk';
+const WS_PATH_TELEPHONY = '/telephony/media';
+const WS_PATH_SOCKET_IO = '/socket.io';
 function candidateWsBases(endpoint) {
     const trimmed = endpoint.replace(/\/+$/, '');
     const parsed = new URL(trimmed);
@@ -72,19 +79,34 @@ async function bootstrap() {
         credentials: true,
     });
     const realtimeService = app.get(realtime_service_1.RealtimeService);
+    const telephonyBridge = app.get(telephony_bridge_service_1.TelephonyBridgeService);
+    const escalationEvents = app.get(escalation_events_service_1.EscalationEventsService);
+    const escalationsService = app.get(escalations_service_1.EscalationsService);
     const httpServer = app.getHttpServer();
-    const rawWss = new WebSocketServer({ noServer: true });
+    const studioWss = new WebSocketServer({ noServer: true });
+    const agentDeskWss = new WebSocketServer({ noServer: true });
+    const telephonyWss = new WebSocketServer({ noServer: true });
     httpServer.on('upgrade', (request, socket, head) => {
         const url = new URL(request.url || '/', 'http://localhost');
-        if (url.pathname !== '/ws') {
-            socket.destroy();
+        const pathname = url.pathname.replace(/\/+$/, '') || '/';
+        const target = pathname === WS_PATH_STUDIO
+            ? studioWss
+            : pathname === WS_PATH_AGENT_DESK
+                ? agentDeskWss
+                : pathname === WS_PATH_TELEPHONY
+                    ? telephonyWss
+                    : null;
+        if (!target) {
+            if (!pathname.startsWith(WS_PATH_SOCKET_IO)) {
+                socket.destroy();
+            }
             return;
         }
-        rawWss.handleUpgrade(request, socket, head, (ws) => {
-            rawWss.emit('connection', ws, request);
+        target.handleUpgrade(request, socket, head, (ws) => {
+            target.emit('connection', ws, request);
         });
     });
-    rawWss.on('connection', async (ws, request) => {
+    studioWss.on('connection', async (ws, request) => {
         const clientId = (0, crypto_1.randomUUID)();
         const url = new URL(request.url || '/', 'http://localhost');
         const domainCode = (url.searchParams.get('domain') || 'general').trim().toLowerCase();
@@ -155,6 +177,11 @@ async function bootstrap() {
                         safeSend(ws, { type: 'output_audio', audio: message.delta });
                         return;
                     }
+                    if (type === 'conversation.item.input_audio_transcription.completed' && message.transcript) {
+                        await realtimeService.recordCallerText(clientId, String(message.transcript));
+                        safeSend(ws, { type: 'input_transcript', text: String(message.transcript) });
+                        return;
+                    }
                     if (type === 'response.done') {
                         if (assistantText.trim()) {
                             await realtimeService.recordAssistantText(clientId, assistantText);
@@ -198,6 +225,25 @@ async function bootstrap() {
                             audio: message.audio,
                         }));
                     }
+                    return;
+                }
+                if (message.type === 'escalate') {
+                    const session = realtimeService.getSession(clientId);
+                    if (!session) {
+                        safeSend(ws, { type: 'escalation_failed', text: 'No active session to escalate.' });
+                        return;
+                    }
+                    const escalation = await escalationsService.create({
+                        conversationId: session.conversationId,
+                        escalationReason: String(message.reason || 'Caller requested a human agent'),
+                        priority: 'high',
+                        channel: 'queue',
+                    });
+                    safeSend(ws, {
+                        type: 'escalated',
+                        escalationId: escalation.escalationId,
+                        status: escalation.status,
+                    });
                 }
             }
             catch {
@@ -210,8 +256,37 @@ async function bootstrap() {
             await realtimeService.unregisterClient(clientId);
         });
     });
+    agentDeskWss.on('connection', (ws) => {
+        const subscriberId = (0, crypto_1.randomUUID)();
+        const unsubscribe = escalationEvents.subscribe(subscriberId, (event) => {
+            safeSend(ws, event);
+        });
+        safeSend(ws, { type: 'connected', at: new Date().toISOString(), subscriberId });
+        const heartbeat = setInterval(() => {
+            if (ws.readyState !== WebSocket.OPEN)
+                return;
+            safeSend(ws, { type: 'ping', at: new Date().toISOString() });
+        }, 25_000);
+        const teardown = () => {
+            clearInterval(heartbeat);
+            unsubscribe();
+        };
+        ws.on('error', teardown);
+        ws.on('close', teardown);
+    });
+    telephonyWss.on('connection', (ws, request) => {
+        const clientId = (0, crypto_1.randomUUID)();
+        const url = new URL(request.url || '/', 'http://localhost');
+        void telephonyBridge.handleConnection(ws, clientId, url.searchParams).catch((error) => {
+            console.error(`Telephony bridge failed [${clientId}]:`, error?.message || error);
+            safeClose(ws);
+        });
+    });
     await app.listen(port, host);
     console.log(`NestJS IVR backend running on http://${host}:${port}`);
+    console.log(`  browser IVR websocket   ws://${host}:${port}${WS_PATH_STUDIO}`);
+    console.log(`  agent desk websocket    ws://${host}:${port}${WS_PATH_AGENT_DESK}`);
+    console.log(`  telephony media stream  ws://${host}:${port}${WS_PATH_TELEPHONY}`);
 }
 void bootstrap();
 //# sourceMappingURL=main.js.map
