@@ -25,7 +25,7 @@
 3. IntentGuard uses keyword matching only - no Gen AI
 4. No adapter pattern - hospital logic directly wired
 5. No dynamic tool loading per domain
-6. No integration layer for external APIs
+6. No integration layer for external APIs 
 
 ## Enhancement Plan
 
