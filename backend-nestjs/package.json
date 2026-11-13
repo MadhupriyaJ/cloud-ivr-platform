@@ -13,8 +13,8 @@
     "build:all": "npm run build:frontend && npm run build",
     "start:all": "npm run build:all && node dist/main",
     "db:migrate": "node scripts/migrate.mjs",
-    "db:migrate:all": "node scripts/migrate.mjs ../database/mssql/001_initial_schema.sql ../database/mssql/002_hospital_schema.sql ../database/mssql/003_hospital_seed.sql ../database/mssql/004_escalation_telephony.sql",
-    "test": "npm run build && node test/telephony.test.mjs && node test/escalation-lifecycle.test.mjs"
+    "db:migrate:all": "node scripts/migrate.mjs ../database/mssql/001_initial_schema.sql ../database/mssql/002_hospital_schema.sql ../database/mssql/002_adapter_integration.sql ../database/mssql/003_hospital_seed.sql ../database/mssql/004_escalation_telephony.sql ../database/mssql/005_multilingual.sql sql/ddl-ivr-engine.sql sql/dml-seed-ivr-engine.sql",
+    "test": "npm run build && node test/telephony.test.mjs && node test/escalation-lifecycle.test.mjs && node test/azure-realtime.test.mjs && node test/multilingual.test.mjs && node test/hospital-logic.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

@@ -18,5 +18,8 @@ dist/
 backend-nestjs/public/
 typescript/vite/dist/
 
+# Replit / local tool state
+.local/
+
 # OS
 .DS_Store

@@ -20,6 +20,13 @@ export class DomainEntity {
   @Column({ name: 'DefaultLanguage', length: 40 })
   defaultLanguage!: string;
 
+  /**
+   * Comma-separated languages callers may use, e.g. "English, Tamil".
+   * Null/empty = any language. Added by database/mssql/005_multilingual.sql.
+   */
+  @Column({ name: 'SupportedLanguages', type: 'nvarchar', length: 200, nullable: true })
+  supportedLanguages!: string | null;
+
   @Column({ name: 'DefaultVoice', length: 60 })
   defaultVoice!: string;
 

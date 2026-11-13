@@ -14,7 +14,8 @@ export type ResolvedInboundNumber = {
   phoneNumber: PhoneNumberEntity | null;
   domainCode: string;
   domainId: string | null;
-  greeting: string;
+  /** Optional pre-stream announcement; the assistant does the real welcome. */
+  greeting: string | null;
   escalationNumber: string | null;
   escalationSkillGroup: string | null;
 };
@@ -109,7 +110,9 @@ export class TelephonyService implements OnModuleInit {
         phoneNumber: null,
         domainCode: domain?.domainCode ?? fallbackCode,
         domainId: domain?.domainId ?? null,
-        greeting: domain?.welcomeMessage ?? 'Welcome. How can I help you today?',
+        // The realtime assistant speaks the welcome itself, in the caller's
+        // language(s); a TwiML <Say> here would greet twice, in English only.
+        greeting: null,
         escalationNumber: (process.env.TELEPHONY_FALLBACK_AGENT_NUMBER || '').trim() || null,
         escalationSkillGroup: null,
       };
@@ -121,7 +124,9 @@ export class TelephonyService implements OnModuleInit {
       phoneNumber: mapping,
       domainCode: domain?.domainCode ?? fallbackCode,
       domainId: mapping.domainId,
-      greeting: mapping.greetingOverride || domain?.welcomeMessage || 'Welcome. How can I help you?',
+      // Only an explicit per-number announcement (e.g. a recording notice) is
+      // played by Twilio before the assistant takes over.
+      greeting: mapping.greetingOverride || null,
       escalationNumber:
         mapping.escalationNumber || (process.env.TELEPHONY_FALLBACK_AGENT_NUMBER || '').trim() || null,
       escalationSkillGroup: mapping.escalationSkillGroup,

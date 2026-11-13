@@ -54,7 +54,7 @@ export class TelephonyController {
    */
   @Post('voice/incoming')
   @Header('Content-Type', 'text/xml')
-  async incomingCall(@Req() request: Request, @Body() body: TwilioVoiceWebhook): Promise<string> {
+  async incomingCall(@Req() request: Request, @Body() body: TwilioVoiceWebhook = {}): Promise<string> {
     this.assertTwilioSignature(request, body);
 
     const base = this.resolveBaseUrl(request);
@@ -79,7 +79,7 @@ export class TelephonyController {
     // knows which domain to load and who is calling without another lookup.
     return connectStreamTwiml({
       streamUrl,
-      greeting: routing.greeting,
+      greeting: routing.greeting ?? undefined,
       parameters: {
         domainCode: routing.domainCode,
         callSid,
@@ -93,7 +93,7 @@ export class TelephonyController {
   /** Call progress events (`completed`, `no-answer`, …) for the call log. */
   @Post('voice/status')
   @Header('Content-Type', 'text/xml')
-  async callStatus(@Req() request: Request, @Body() body: TwilioVoiceWebhook): Promise<string> {
+  async callStatus(@Req() request: Request, @Body() body: TwilioVoiceWebhook = {}): Promise<string> {
     this.assertTwilioSignature(request, body);
 
     const callSid = String(body.CallSid || '');

@@ -3,6 +3,16 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { EscalationsService } from '../escalations/escalations.service';
 import { EscalationDetectorService } from '../escalations/escalation-detector.service';
 import { TelephonyService } from './telephony.service';
+import {
+  ESCALATE_TO_HUMAN_TOOL,
+  RealtimeToolRunner,
+  buildAzureRealtimeConnection,
+  buildResponseCreate,
+  buildSessionUpdate,
+  classifyRealtimeEvent,
+} from '../realtime/azure-realtime';
+import { transcriptionLanguageHint } from '../realtime/language-policy';
+import { HospitalToolsService } from '../hospital/hospital-tools.service';
 
 const { WebSocket } = require('ws');
 
@@ -27,34 +37,6 @@ type CallContext = {
   escalating: boolean;
 };
 
-/** Tool the model can call to hand the caller to a human. */
-const ESCALATE_TOOL = {
-  type: 'function',
-  name: 'escalate_to_human',
-  description:
-    'Transfer the caller to a human agent. Use when the caller asks for a person, is upset, ' +
-    'reports an emergency or fraud, or asks for something outside the supported intents.',
-  parameters: {
-    type: 'object',
-    properties: {
-      reason: {
-        type: 'string',
-        description: 'Short reason for the handover, shown to the agent.',
-      },
-      priority: {
-        type: 'string',
-        enum: ['low', 'normal', 'high', 'urgent'],
-        description: 'urgent for medical emergencies or fraud, high when the caller is upset.',
-      },
-      summary: {
-        type: 'string',
-        description: 'One or two sentences summarising what the caller needs.',
-      },
-    },
-    required: ['reason'],
-  },
-};
-
 /**
  * Bridges a Twilio Media Stream to the Azure OpenAI realtime API.
  *
@@ -72,6 +54,7 @@ export class TelephonyBridgeService {
     private readonly telephonyService: TelephonyService,
     private readonly escalationsService: EscalationsService,
     private readonly detector: EscalationDetectorService,
+    private readonly hospitalTools: HospitalToolsService,
   ) {}
 
   /**
@@ -89,6 +72,7 @@ export class TelephonyBridgeService {
       closed = true;
       safeClose(realtimeWs);
       safeClose(twilioWs);
+      this.hospitalTools.endSession(clientId);
       void this.realtimeService.unregisterClient(clientId);
     };
 
@@ -163,26 +147,15 @@ export class TelephonyBridgeService {
                   .catch(() => undefined);
                 await this.maybeEscalate(clientId, context, transcript);
               },
-              onEscalationTool: async (args, callId) => {
-                if (!context) return;
+              onEscalationTool: async (args) => {
+                if (!context) return { ok: false };
                 await this.escalateNow(clientId, context, {
                   reason: args.reason || 'Assistant requested human handover',
                   priority: (args.priority as any) || 'high',
                   summary: args.summary,
                 });
-                // Let the model close the turn gracefully while Twilio redirects.
-                sendJson(realtimeWs, {
-                  type: 'conversation.item.create',
-                  item: {
-                    type: 'function_call_output',
-                    call_id: callId,
-                    output: JSON.stringify({
-                      status: 'transferring',
-                      message: 'Caller is being connected to an agent.',
-                    }),
-                  },
-                });
-                sendJson(realtimeWs, { type: 'response.create' });
+                // The model closes the turn gracefully while Twilio redirects.
+                return { status: 'transferring', message: 'Caller is being connected to an agent.' };
               },
             });
           } catch (error) {
@@ -221,7 +194,7 @@ export class TelephonyBridgeService {
       onAssistantDelta: (delta: string) => void;
       onResponseDone: () => Promise<void>;
       onCallerTranscript: (transcript: string) => Promise<void>;
-      onEscalationTool: (args: Record<string, string>, callId: string) => Promise<void>;
+      onEscalationTool: (args: Record<string, string>) => Promise<Record<string, unknown>>;
     },
   ): Promise<any> {
     const started = await this.realtimeService.startSession(clientId, {
@@ -238,44 +211,63 @@ export class TelephonyBridgeService {
       .attachConversation(context.callSid, started.session.conversationId)
       .catch(() => undefined);
 
-    const { url, headers } = buildAzureRealtimeUrl();
+    // Hospital lines get the booking tools; every line can escalate.
+    const hospitalLine = this.hospitalTools.appliesTo(started);
+    if (hospitalLine) {
+      this.hospitalTools.startSession(clientId, {
+        callerPhone: context.from,
+        conversationId: started.session.conversationId,
+        organizationName: started.organizationName,
+      });
+    }
+    const tools = hospitalLine
+      ? [...this.hospitalTools.definitions(), ESCALATE_TO_HUMAN_TOOL]
+      : [ESCALATE_TO_HUMAN_TOOL];
+    const instructions = [
+      started.instructions,
+      hospitalLine ? this.hospitalTools.instructions() : '',
+      'When you cannot help or the caller asks for a person, call the escalate_to_human function instead of only apologising.',
+      'The caller is on a phone call; their caller ID is known to the system, so do not ask for their number unless verification fails.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const { url, headers } = buildAzureRealtimeConnection();
     const realtimeWs = new WebSocket(url, { headers });
+
+    const toolRunner = new RealtimeToolRunner(
+      (event) => sendJson(realtimeWs, event),
+      async (name, args) =>
+        name === ESCALATE_TO_HUMAN_TOOL.name
+          ? handlers.onEscalationTool(args)
+          : this.hospitalTools.execute(clientId, name, args),
+      (name, error) => this.logger.error(`Tool ${name} failed on call ${context.callSid}: ${String(error)}`),
+    );
 
     realtimeWs.on('error', (error: any) => {
       this.logger.error(`Azure realtime error on call ${context.callSid}: ${error?.message || error}`);
     });
 
-    realtimeWs.on('open', () => {
-      sendJson(realtimeWs, {
-        type: 'session.update',
-        session: {
-          turn_detection: {
-            type: 'server_vad',
-            threshold: 0.55,
-            silence_duration_ms: 350,
-            prefix_padding_ms: 200,
-            create_response: true,
-          },
-          input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
-          // Telephony audio is 8 kHz G.711 μ-law in both directions.
-          input_audio_format: 'g711_ulaw',
-          output_audio_format: 'g711_ulaw',
-          voice: started.voice || 'alloy',
-          instructions: `${started.instructions} When you cannot help or the caller asks for a person, call the escalate_to_human function instead of only apologising.`,
-          modalities: ['text', 'audio'],
-          temperature: 0.7,
-          tools: [ESCALATE_TOOL],
-          tool_choice: 'auto',
-        },
-      });
+    // If Azure drops the session the caller would otherwise sit in silence.
+    realtimeWs.on('close', (code: number) => {
+      this.logger.warn(`Azure realtime closed on call ${context.callSid} (code ${code})`);
+      safeClose(twilioWs);
+    });
 
-      sendJson(realtimeWs, {
-        type: 'response.create',
-        response: {
-          modalities: ['text', 'audio'],
-          instructions: `Greet the caller with exactly: ${started.welcomeMessage}`,
-        },
-      });
+    realtimeWs.on('open', () => {
+      sendJson(
+        realtimeWs,
+        buildSessionUpdate({
+          // Telephony audio is 8 kHz G.711 μ-law in both directions.
+          codec: 'g711_ulaw',
+          voice: started.voice,
+          instructions,
+          turnDetection: { threshold: 0.55, silenceDurationMs: 350, prefixPaddingMs: 200 },
+          tools,
+          transcriptionLanguage: transcriptionLanguageHint(started.supportedLanguages),
+        }),
+      );
+      sendJson(realtimeWs, buildResponseCreate(started.greetingInstruction));
     });
 
     realtimeWs.on('message', async (raw: any) => {
@@ -286,8 +278,8 @@ export class TelephonyBridgeService {
         return;
       }
 
-      switch (event.type) {
-        case 'response.audio.delta':
+      switch (classifyRealtimeEvent(event.type)) {
+        case 'assistant_audio':
           if (event.delta) {
             sendJson(twilioWs, {
               event: 'media',
@@ -297,39 +289,35 @@ export class TelephonyBridgeService {
           }
           return;
 
-        case 'input_audio_buffer.speech_started':
+        case 'caller_speech_started':
           // Barge-in: drop audio Twilio has buffered so the caller is not
           // talking over a reply that is already obsolete.
           sendJson(twilioWs, { event: 'clear', streamSid: context.streamSid });
           return;
 
-        case 'response.audio_transcript.delta':
-        case 'response.text.delta':
-        case 'response.output_text.delta':
+        case 'assistant_text':
           if (event.delta) handlers.onAssistantDelta(event.delta);
           return;
 
-        case 'response.done':
+        case 'response_created':
+          toolRunner.onResponseCreated();
+          return;
+
+        case 'response_done':
+          toolRunner.onResponseDone();
           await handlers.onResponseDone();
           return;
 
-        case 'conversation.item.input_audio_transcription.completed':
+        case 'caller_transcript':
           if (event.transcript) {
             await handlers.onCallerTranscript(String(event.transcript));
           }
           return;
 
-        case 'response.function_call_arguments.done': {
-          if (event.name !== ESCALATE_TOOL.name) return;
-          let args: Record<string, string> = {};
-          try {
-            args = JSON.parse(event.arguments || '{}');
-          } catch {
-            args = {};
-          }
-          await handlers.onEscalationTool(args, event.call_id);
+        case 'function_call':
+          this.logger.log(`Call ${context.callSid} tool: ${event.name}`);
+          await toolRunner.onFunctionCall(event);
           return;
-        }
 
         case 'error':
           this.logger.error(
@@ -435,27 +423,4 @@ function safeClose(ws: any): void {
   } catch {
     // ignore
   }
-}
-
-/** Azure realtime endpoint + auth headers, shared shape with main.ts. */
-export function buildAzureRealtimeUrl(): { url: string; headers: Record<string, string> } {
-  const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').replace(/\/+$/, '');
-  const deployment = (process.env.AZURE_OPENAI_DEPLOYMENT || '').trim();
-  const apiKey = (process.env.AZURE_OPENAI_API_KEY || '').trim();
-  const apiVersion = (process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview').trim();
-
-  if (!endpoint || !deployment || !apiKey) {
-    throw new Error('Azure OpenAI realtime configuration missing.');
-  }
-
-  const host = new URL(endpoint).host;
-  const previewApiVersion = apiVersion.endsWith('-preview') ? apiVersion : '2025-01-01-preview';
-
-  return {
-    url: `wss://${host}/openai/realtime?api-version=${previewApiVersion}&deployment=${deployment}`,
-    headers: {
-      'api-key': apiKey,
-      'OpenAI-Beta': 'realtime=v1',
-    },
-  };
 }

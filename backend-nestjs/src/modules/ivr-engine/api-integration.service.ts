@@ -12,6 +12,21 @@ import { DomainApiEndpoint, IvrNodeAction } from './ivr-flow-loader.service';
  * No hardcoded API logic — everything is driven by DomainApiEndpoints config.
  */
 
+/**
+ * An endpoint's BaseUrl may be empty, meaning "this backend". Rows seeded
+ * before that convention hard-code http://localhost:8010, which breaks
+ * wherever the server listens on another port (Render uses 10000), so those
+ * are treated as "this backend" too. Anything else is an external API.
+ */
+export function resolveEndpointBaseUrl(baseUrl: string | null | undefined): string {
+  const trimmed = (baseUrl || '').trim().replace(/\/+$/, '');
+  const self = `http://127.0.0.1:${process.env.PORT || 8010}`;
+  if (!trimmed || /^https?:\/\/(localhost|127\.0\.0\.1):8010$/i.test(trimmed)) {
+    return self;
+  }
+  return trimmed;
+}
+
 export interface ApiCallResult {
   success: boolean;
   data: Record<string, any> | null;
@@ -47,7 +62,7 @@ export class ApiIntegrationService {
     try {
       // 1. Build the request URL (resolve template variables in path)
       const resolvedPath = this.resolveTemplate(endpoint.path, sessionVars);
-      const fullUrl = `${endpoint.baseUrl}${resolvedPath}`;
+      const fullUrl = `${resolveEndpointBaseUrl(endpoint.baseUrl)}${resolvedPath}`;
 
       // 2. Build request headers
       const headers: Record<string, string> = {
@@ -356,7 +371,7 @@ export class ApiIntegrationService {
           JSON.stringify({
             endpoint: endpoint.endpointCode,
             method: endpoint.httpMethod,
-            url: `${endpoint.baseUrl}${endpoint.path}`,
+            url: `${resolveEndpointBaseUrl(endpoint.baseUrl)}${endpoint.path}`,
             sessionId: sessionVars._sessionId || null,
           }),
         ],

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { KeenIcon } from '@/components';
+import { DoctorImportPanel } from './DoctorImportPanel';
 import {
   bootstrapHospital,
   cancelHospitalAppointment,
@@ -510,6 +511,17 @@ const HospitalWorkspacePage = () => {
         <IvrStatCard label="Open Slots" value={availableDoctors.reduce((sum, item) => sum + (item.availableSlots || 0), 0)} meta="Available on selected date" tone="amber" />
         <IvrStatCard label="Appointments" value={appointments.length} meta="Loaded for selected filters" tone="rose" />
       </div>
+
+      <DoctorImportPanel
+        key={hospitalDomain?.organization_name || 'hospital'}
+        defaultHospitalName={hospitalDomain?.organization_name}
+        onImported={async (message) => {
+          setToast({ kind: 'success', text: message });
+          await loadHospitalDomain();
+          await loadDirectory(selectedDepartmentId || undefined, appointmentForm.appointmentDate);
+        }}
+        onError={(message) => setToast({ kind: 'danger', text: message })}
+      />
 
       <div className="grid gap-5 xl:grid-cols-[340px_1fr]">
         <div className="card border border-gray-200 shadow-none dark:border-coal-100">

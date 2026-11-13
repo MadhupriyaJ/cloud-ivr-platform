@@ -206,7 +206,7 @@ const DomainConfigPage = () => {
               />
             </label>
             <label className="form-label flex-col">
-              Language
+              Greeting Language
               <input
                 className="input mt-1.5"
                 value={form.language}
@@ -214,6 +214,20 @@ const DomainConfigPage = () => {
               />
             </label>
           </div>
+
+          <label className="form-label flex-col">
+            Supported Languages
+            <input
+              className="input mt-1.5"
+              placeholder="English, Tamil"
+              value={form.supported_languages ?? ''}
+              onChange={(event) => setForm((prev) => ({ ...prev, supported_languages: event.target.value }))}
+            />
+            <span className="text-2sm text-gray-600 mt-1">
+              Comma-separated. The assistant replies in whichever of these the caller speaks, including
+              mixed Tamil-English. Leave empty to allow any language.
+            </span>
+          </label>
 
           <label className="form-label flex-col">
             Welcome Message

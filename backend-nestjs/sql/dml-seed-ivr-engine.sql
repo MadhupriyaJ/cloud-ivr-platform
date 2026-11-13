@@ -1,15 +1,33 @@
 -- ============================================================
 -- DML: Seed data for Generic IVR Engine
--- Seeds IVR flows for hospital-management and banking domains
--- Also seeds mock API endpoints for banking
+-- Seeds IVR flows for the hospital and banking domains
+-- Also seeds mock API endpoints for both
+--
+-- Domains are looked up by DomainCode, never by a hard-coded DomainId, so
+-- this runs on any database. Run 003_hospital_seed.sql first; the banking
+-- domain is created here if it does not exist. Re-running is a no-op.
+--
+-- An empty BaseUrl means "this backend": ApiIntegrationService resolves it
+-- to the running server, so the same rows work locally and on Render.
 -- ============================================================
 
+DECLARE @hospitalDomainId uniqueidentifier = COALESCE(
+  (SELECT DomainId FROM Domains WHERE DomainCode = 'hospital'),
+  (SELECT DomainId FROM Domains WHERE DomainCode = 'hospital-management'));
+
+IF @hospitalDomainId IS NULL
+  THROW 50001, 'Hospital domain not found. Run database/mssql/003_hospital_seed.sql first.', 1;
+
+IF EXISTS (SELECT 1 FROM IvrFlows WHERE DomainId = @hospitalDomainId AND FlowCode = 'main_menu')
+BEGIN
+  PRINT 'IVR engine seed already applied; skipping.';
+  RETURN;
+END
+
 -- ============================================================
--- 1. Hospital Management Domain - IVR Flow
--- DomainId: 03D19B01-9751-4DFE-9D33-ECBF99D3E7D9
+-- 1. Hospital Domain - IVR Flow
 -- ============================================================
 
-DECLARE @hospitalDomainId uniqueidentifier = '03D19B01-9751-4DFE-9D33-ECBF99D3E7D9';
 DECLARE @hospitalFlowId uniqueidentifier = NEWID();
 
 INSERT INTO IvrFlows (FlowId, DomainId, FlowCode, FlowName, Description, IsEntryFlow, FlowVersion, IsActive)
@@ -147,23 +165,30 @@ VALUES (@n11, 'api_call', 1, 'get_billing_info',
   1);
 
 -- ============================================================
--- 2. Hospital Domain API Endpoints (internal)
+-- 2. Hospital Domain API Endpoints (mock APIs on this backend)
 -- ============================================================
 
 INSERT INTO DomainApiEndpoints (DomainId, EndpointCode, EndpointName, HttpMethod, BaseUrl, Path, AuthType, IsActive)
 VALUES
-(@hospitalDomainId, 'book_appointment', 'Book Appointment', 'POST', 'http://localhost:8010', '/api/hospital/appointments', 'none', 1),
-(@hospitalDomainId, 'get_lab_reports', 'Get Lab Reports', 'GET', 'http://localhost:8010', '/api/hospital/lab-reports/{{patient_id}}', 'none', 1),
-(@hospitalDomainId, 'get_billing_info', 'Get Billing Info', 'GET', 'http://localhost:8010', '/api/hospital/billing/{{patient_id}}', 'none', 1),
-(@hospitalDomainId, 'get_departments', 'Get Departments', 'GET', 'http://localhost:8010', '/api/hospital/departments', 'none', 1),
-(@hospitalDomainId, 'get_doctors', 'Get Doctors by Dept', 'GET', 'http://localhost:8010', '/api/hospital/doctors/{{department_id}}', 'none', 1);
+(@hospitalDomainId, 'book_appointment', 'Book Appointment', 'POST', '', '/api/mock/hospital/book-appointment', 'none', 1),
+(@hospitalDomainId, 'get_lab_reports', 'Get Lab Reports', 'POST', '', '/api/mock/hospital/check-lab-reports', 'none', 1),
+(@hospitalDomainId, 'get_billing_info', 'Get Billing Info', 'POST', '', '/api/mock/hospital/billing-inquiry', 'none', 1),
+(@hospitalDomainId, 'get_departments', 'Get Departments', 'GET', '', '/api/mock/hospital/departments', 'none', 1),
+(@hospitalDomainId, 'get_doctors', 'Get Doctors by Dept', 'GET', '', '/api/mock/hospital/doctor-availability', 'none', 1);
 
 -- ============================================================
 -- 3. Banking Domain - IVR Flow
--- DomainId: F4A891A5-71EF-4BCF-888B-A898D5E44D5E
 -- ============================================================
 
-DECLARE @bankingDomainId uniqueidentifier = 'F4A891A5-71EF-4BCF-888B-A898D5E44D5E';
+IF NOT EXISTS (SELECT 1 FROM Domains WHERE DomainCode = 'banking')
+  INSERT INTO Domains (DomainCode, DisplayName, OrganizationName, IndustryType, DefaultLanguage, DefaultVoice,
+                       WelcomeMessage, FallbackMessage, EscalationMessage, IsActive)
+  VALUES ('banking', 'Banking IVR', 'Demo Bank', 'banking', 'English', 'alloy',
+          'Welcome to Demo Bank. How can I help you today?',
+          'I can help with balance, transfers, and card services.',
+          'Connecting you to a banking specialist.', 1);
+
+DECLARE @bankingDomainId uniqueidentifier = (SELECT DomainId FROM Domains WHERE DomainCode = 'banking');
 DECLARE @bankingFlowId uniqueidentifier = NEWID();
 
 INSERT INTO IvrFlows (FlowId, DomainId, FlowCode, FlowName, Description, IsEntryFlow, FlowVersion, IsActive)
@@ -303,9 +328,10 @@ VALUES (@b11, 'api_call', 1, 'block_card',
 
 INSERT INTO DomainApiEndpoints (DomainId, EndpointCode, EndpointName, HttpMethod, BaseUrl, Path, AuthType, IsActive)
 VALUES
-(@bankingDomainId, 'check_balance', 'Check Account Balance', 'GET', 'http://localhost:8010', '/api/mock/banking/balance/{{account_number}}', 'none', 1),
-(@bankingDomainId, 'execute_transfer', 'Execute Transfer', 'POST', 'http://localhost:8010', '/api/mock/banking/transfer', 'none', 1),
-(@bankingDomainId, 'block_card', 'Block Card', 'POST', 'http://localhost:8010', '/api/mock/banking/card/block', 'none', 1),
-(@bankingDomainId, 'request_new_card', 'Request New Card', 'POST', 'http://localhost:8010', '/api/mock/banking/card/request', 'none', 1),
-(@bankingDomainId, 'card_status', 'Check Card Status', 'GET', 'http://localhost:8010', '/api/mock/banking/card/status/{{account_number}}', 'none', 1);
+(@bankingDomainId, 'check_balance', 'Check Account Balance', 'POST', '', '/api/mock/banking/check-balance', 'none', 1),
+(@bankingDomainId, 'execute_transfer', 'Execute Transfer', 'POST', '', '/api/mock/banking/fund-transfer', 'none', 1),
+(@bankingDomainId, 'block_card', 'Block Card', 'POST', '', '/api/mock/banking/card-block', 'none', 1),
+-- No dedicated mock exists for these two yet; they reuse the closest one.
+(@bankingDomainId, 'request_new_card', 'Request New Card', 'POST', '', '/api/mock/banking/card-block', 'none', 1),
+(@bankingDomainId, 'card_status', 'Check Card Status', 'POST', '', '/api/mock/banking/loan-status', 'none', 1);
 GO

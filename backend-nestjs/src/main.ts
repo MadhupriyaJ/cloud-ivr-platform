@@ -6,6 +6,16 @@ import { RealtimeService } from './modules/realtime/realtime.service';
 import { TelephonyBridgeService } from './modules/telephony/telephony-bridge.service';
 import { EscalationEventsService } from './modules/escalations/escalation-events.service';
 import { EscalationsService } from './modules/escalations/escalations.service';
+import {
+  ESCALATE_TO_HUMAN_TOOL,
+  RealtimeToolRunner,
+  buildAzureRealtimeConnection,
+  buildResponseCreate,
+  buildSessionUpdate,
+  classifyRealtimeEvent,
+} from './modules/realtime/azure-realtime';
+import { transcriptionLanguageHint } from './modules/realtime/language-policy';
+import { HospitalToolsService } from './modules/hospital/hospital-tools.service';
 
 const { WebSocket, WebSocketServer } = require('ws');
 
@@ -15,42 +25,6 @@ const WS_PATH_AGENT_DESK = '/ws/agent-desk';
 const WS_PATH_TELEPHONY = '/telephony/media';
 /** engine.io transport path; the Nest socket.io gateway handles these itself. */
 const WS_PATH_SOCKET_IO = '/socket.io';
-
-function candidateWsBases(endpoint: string): string[] {
-  const trimmed = endpoint.replace(/\/+$/, '');
-  const parsed = new URL(trimmed);
-  const host = parsed.host;
-  const bases = [`wss://${host}`];
-
-  if (host.endsWith('.cognitiveservices.azure.com')) {
-    const resource = host.split('.')[0];
-    bases.push(`wss://${resource}.openai.azure.com`);
-  }
-
-  return [...new Set(bases)];
-}
-
-function buildAzureRealtimeUrl(): { url: string; headers: Record<string, string> } {
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT || '';
-  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || '';
-  const apiKey = process.env.AZURE_OPENAI_API_KEY || '';
-  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview';
-
-  if (!endpoint || !deployment || !apiKey) {
-    throw new Error('Azure OpenAI realtime configuration missing.');
-  }
-
-  const wsBase = candidateWsBases(endpoint)[0];
-  const previewApiVersion = apiVersion.endsWith('-preview') ? apiVersion : '2025-01-01-preview';
-
-  return {
-    url: `${wsBase}/openai/realtime?api-version=${previewApiVersion}&deployment=${deployment}`,
-    headers: {
-      'api-key': apiKey,
-      'OpenAI-Beta': 'realtime=v1',
-    },
-  };
-}
 
 /** Safely send a JSON message to a WebSocket if it's still open */
 function safeSend(ws: any, data: object): boolean {
@@ -97,6 +71,7 @@ async function bootstrap() {
   const telephonyBridge = app.get(TelephonyBridgeService);
   const escalationEvents = app.get(EscalationEventsService);
   const escalationsService = app.get(EscalationsService);
+  const hospitalTools = app.get(HospitalToolsService);
   const httpServer = app.getHttpServer();
 
   const studioWss = new WebSocketServer({ noServer: true });
@@ -152,11 +127,51 @@ async function bootstrap() {
 
     try {
       const started = await realtimeService.startSession(clientId, { domainCode });
-      const { url: realtimeUrl, headers } = buildAzureRealtimeUrl();
+      const { url: realtimeUrl, headers } = buildAzureRealtimeConnection();
+
+      // Hospital domains get the booking tools; every domain can escalate.
+      const hospitalLine = hospitalTools.appliesTo(started);
+      if (hospitalLine) {
+        hospitalTools.startSession(clientId, {
+          conversationId: started.session.conversationId,
+          organizationName: started.organizationName,
+        });
+      }
+      const tools = hospitalLine
+        ? [...hospitalTools.definitions(), ESCALATE_TO_HUMAN_TOOL]
+        : [ESCALATE_TO_HUMAN_TOOL];
+      const instructions = [
+        started.instructions,
+        hospitalLine ? hospitalTools.instructions() : '',
+        'When the caller asks for a person or you cannot help, call escalate_to_human.',
+      ]
+        .filter(Boolean)
+        .join(' ');
 
       realtimeWs = new WebSocket(realtimeUrl, {
         headers,
       });
+
+      const toolRunner = new RealtimeToolRunner(
+        (event) => safeSend(realtimeWs, event),
+        async (name, args) => {
+          // Lets the browser show what the assistant is doing.
+          safeSend(ws, { type: 'tool_call', name });
+          if (name !== ESCALATE_TO_HUMAN_TOOL.name) {
+            return hospitalTools.execute(clientId, name, args);
+          }
+          const escalation = await escalationsService.create({
+            conversationId: started.session.conversationId,
+            escalationReason: String(args.reason || 'Assistant requested human handover').slice(0, 255),
+            priority: ['low', 'normal', 'high', 'urgent'].includes(args.priority) ? args.priority : 'high',
+            channel: 'queue',
+            contextSummary: args.summary,
+          });
+          safeSend(ws, { type: 'escalated', escalationId: escalation.escalationId, status: escalation.status });
+          return { status: escalation.status, message: 'A staff member will join or call back shortly.' };
+        },
+        (name, error) => console.error(`Tool ${name} failed [${clientId}]:`, error),
+      );
 
       // ── CRITICAL: Attach error handler IMMEDIATELY after creating the
       // Azure WebSocket, BEFORE the 'open' event fires. This prevents
@@ -173,63 +188,40 @@ async function bootstrap() {
       });
 
       realtimeWs.on('open', () => {
-        const sessionUpdate = {
-          type: 'session.update',
-          session: {
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.58,
-              silence_duration_ms: 150,
-              prefix_padding_ms: 120,
-              create_response: true,
-            },
-            input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
-            input_audio_format: 'pcm16',
-            output_audio_format: 'pcm16',
-            voice: started.voice || 'alloy',
-            instructions: started.instructions,
-            modalities: ['text', 'audio'],
-            temperature: 0.8,
-            max_response_output_tokens: 128,
-          },
-        };
-
-        realtimeWs.send(JSON.stringify(sessionUpdate));
+        // No output-token cap: the old 128-token limit cut spoken answers off
+        // after a few seconds, mid-sentence.
         realtimeWs.send(
-          JSON.stringify({
-            type: 'response.create',
-            response: {
-              modalities: ['text', 'audio'],
-              instructions: `Say exactly this sentence and nothing else: ${started.welcomeMessage}`,
-            },
-          }),
+          JSON.stringify(
+            buildSessionUpdate({
+              codec: 'pcm16',
+              voice: started.voice,
+              instructions,
+              tools,
+              turnDetection: { threshold: 0.58, silenceDurationMs: 150, prefixPaddingMs: 120 },
+              transcriptionLanguage: transcriptionLanguageHint(started.supportedLanguages),
+            }),
+          ),
         );
+        realtimeWs.send(JSON.stringify(buildResponseCreate(started.greetingInstruction)));
       });
 
       realtimeWs.on('message', async (payload: any) => {
         try {
           const message = JSON.parse(payload.toString());
-          const type = message.type;
+          const kind = classifyRealtimeEvent(message.type);
 
-          if (
-            (
-              type === 'response.text.delta' ||
-              type === 'response.output_text.delta' ||
-              type === 'response.audio_transcript.delta'
-            ) &&
-            message.delta
-          ) {
+          if (kind === 'assistant_text' && message.delta) {
             assistantText += message.delta;
             safeSend(ws, { type: 'output_text', text: message.delta });
             return;
           }
 
-          if (type === 'response.audio.delta' && message.delta) {
+          if (kind === 'assistant_audio' && message.delta) {
             safeSend(ws, { type: 'output_audio', audio: message.delta });
             return;
           }
 
-          if (type === 'conversation.item.input_audio_transcription.completed' && message.transcript) {
+          if (kind === 'caller_transcript' && message.transcript) {
             // Keep the browser session transcript in the conversation log so an
             // escalated web chat reaches the agent with the same context a call
             // would have.
@@ -238,7 +230,18 @@ async function bootstrap() {
             return;
           }
 
-          if (type === 'response.done') {
+          if (kind === 'response_created') {
+            toolRunner.onResponseCreated();
+            return;
+          }
+
+          if (kind === 'function_call') {
+            await toolRunner.onFunctionCall(message);
+            return;
+          }
+
+          if (kind === 'response_done') {
+            toolRunner.onResponseDone();
             if (assistantText.trim()) {
               await realtimeService.recordAssistantText(clientId, assistantText);
             }
@@ -247,8 +250,9 @@ async function bootstrap() {
             return;
           }
 
-          if (type === 'error') {
+          if (kind === 'error') {
             const text = message.error?.message || 'Realtime API returned an error.';
+            console.error(`Azure realtime error [${clientId}]:`, text);
             safeSend(ws, { type: 'output_text', text });
             safeSend(ws, { type: 'output_text_done' });
           }
@@ -277,7 +281,7 @@ async function bootstrap() {
         const message = JSON.parse(payload.toString());
 
         if (message.type === 'input_audio' && message.audio) {
-          await realtimeService.handleAudioChunk(clientId, message.audio);
+          // Forward immediately; nothing is written to the database per chunk.
           if (realtimeWs && realtimeWs.readyState === WebSocket.OPEN) {
             realtimeWs.send(
               JSON.stringify({
@@ -316,6 +320,7 @@ async function bootstrap() {
 
     ws.on('close', async () => {
       safeClose(realtimeWs);
+      hospitalTools.endSession(clientId);
       await realtimeService.unregisterClient(clientId);
     });
   });

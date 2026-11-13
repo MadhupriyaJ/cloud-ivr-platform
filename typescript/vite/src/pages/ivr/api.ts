@@ -42,9 +42,70 @@ const API_BASE = resolveApiBase();
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init);
   if (!response.ok) {
-    throw new Error(`${init?.method || 'GET'} ${path} failed (${response.status})`);
+    // Surface the backend's explanation (e.g. "deploy a chat model") when it sends one.
+    let detail = '';
+    try {
+      const body = await response.json();
+      detail = Array.isArray(body?.message) ? body.message.join('; ') : String(body?.message || '');
+    } catch {
+      detail = '';
+    }
+    throw new Error(`${init?.method || 'GET'} ${path} failed (${response.status})${detail ? `: ${detail}` : ''}`);
   }
   return (await response.json()) as T;
+}
+
+export type WebDoctor = {
+  name: string;
+  specialization: string;
+  department: string;
+  qualification?: string | null;
+  source_url?: string | null;
+};
+
+export type DoctorWebSearchResult = {
+  hospital: { name: string; city: string | null; website: string | null };
+  doctors: WebDoctor[];
+  sources: string[];
+  searches: number;
+  warning?: string;
+};
+
+export type DoctorImportResult = {
+  departmentsCreated: number;
+  doctorsCreated: number;
+  doctorsUpdated: number;
+  doctorsDeactivated: number;
+  upcomingAppointmentsAffected: number;
+};
+
+/** Step 1: search the web for a hospital's doctors (read-only). */
+export async function searchDoctorsOnWeb(input: {
+  hospitalName: string;
+  city?: string;
+  website?: string;
+}): Promise<DoctorWebSearchResult> {
+  return fetchJson<DoctorWebSearchResult>('/api/hospital/doctor-import/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+}
+
+/** Step 2: write the reviewed doctors into the directory. */
+export async function applyDoctorImport(input: {
+  doctors: WebDoctor[];
+  deactivateMissing: boolean;
+  organizationName?: string;
+}): Promise<DoctorImportResult> {
+  const result = await fetchJson<DoctorImportResult>('/api/hospital/doctor-import/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  invalidateCachePrefix('hospital:');
+  invalidateCachePrefix('domains:');
+  return result;
 }
 
 async function fetchItems<T>(path: string): Promise<T[]> {

@@ -9,6 +9,9 @@ import { BillingEntity } from './billing.entity';
 import { LabReportEntity } from './lab-report.entity';
 import { HospitalController } from './hospital.controller';
 import { HospitalService } from './hospital.service';
+import { HospitalToolsService } from './hospital-tools.service';
+import { DoctorImportService } from './doctor-import.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { DomainEntity } from '../domains/domain.entity';
 import { DomainIntentEntity } from '../domain-intents/domain-intent.entity';
 import { DomainRuleEntity } from '../domain-rules/domain-rule.entity';
@@ -31,9 +34,10 @@ import { ToolDefinitionEntity } from '../tool-definitions/tool-definition.entity
       BillingEntity,
       LabReportEntity,
     ]),
+    NotificationsModule,
   ],
   controllers: [HospitalController],
-  providers: [HospitalService],
-  exports: [HospitalService],
+  providers: [HospitalService, HospitalToolsService, DoctorImportService],
+  exports: [HospitalService, HospitalToolsService],
 })
 export class HospitalModule {}

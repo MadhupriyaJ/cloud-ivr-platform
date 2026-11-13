@@ -31,15 +31,14 @@ services:
         sync: false
       - key: AZURE_OPENAI_API_KEY
         sync: false
+      # Realtime uses the GA endpoint (/openai/v1/realtime), which takes no
+      # api-version. Set the deployment name of gpt-realtime-mini here.
       - key: AZURE_OPENAI_DEPLOYMENT
         sync: false
-      - key: AZURE_OPENAI_API_VERSION
-        value: 2024-10-01-preview
+      # Optional: only for /api/speech/token and the avatar relay token.
       - key: AZURE_SPEECH_REGION
         sync: false
       - key: AZURE_SPEECH_API_KEY
-        sync: false
-      - key: AZURE_COMMUNICATION_CONNECTION_STRING
         sync: false
       # Telephony: inbound phone number -> IVR, and live escalation transfers.
       - key: PUBLIC_BASE_URL

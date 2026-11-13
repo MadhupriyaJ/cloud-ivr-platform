@@ -10,6 +10,7 @@ import { AgentsModule } from '../agents/agents.module';
 import { DomainModule } from '../domains/domain.module';
 import { EscalationsModule } from '../escalations/escalations.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { HospitalModule } from '../hospital/hospital.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { RealtimeModule } from '../realtime/realtime.module';
     DomainModule,
     EscalationsModule,
     RealtimeModule,
+    HospitalModule,
   ],
   controllers: [TelephonyController],
   providers: [TelephonyService, TelephonyBridgeService, TwilioService],

@@ -8,6 +8,20 @@ import { CreateDomainDto } from './dto/create-domain.dto';
 
 const CACHE_TTL = 60_000; // 60 seconds for domain list
 
+/**
+ * Accept supported languages as "English, Tamil" or ["English", "Tamil"] and
+ * store them as one comma-separated string. Returns undefined when the field
+ * was not sent, so an update leaves the stored value alone; an empty value
+ * becomes null, which means "any language".
+ */
+function normalizeLanguages(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  const parts = (Array.isArray(value) ? value : String(value ?? '').split(','))
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+  return parts.length ? [...new Set(parts)].join(', ').slice(0, 200) : null;
+}
+
 @Controller('domains')
 export class DomainController {
   constructor(
@@ -49,6 +63,7 @@ export class DomainController {
       organization_name: domain.organizationName,
       voice: domain.defaultVoice,
       language: domain.defaultLanguage,
+      supported_languages: domain.supportedLanguages ?? '',
       welcome_message: domain.welcomeMessage,
       fallback_message: domain.fallbackMessage,
       intents: intents.filter((item) => item.isActive).map((item) => item.intentLabel || item.intentCode),
@@ -194,6 +209,10 @@ export class DomainController {
     fallbackMessage: string;
     escalationMessage: string;
   }) {
+    // The system prompt is edited on the Prompts & Tools page; only seed a
+    // default when the domain has none, so a domain edit never wipes it.
+    const existingSystemPrompt = await this.promptTemplatesService.findLatestActiveByType(domainId, 'system');
+
     await Promise.all([
       this.promptTemplatesService.upsertActiveTemplate(domainId, {
         promptType: 'welcome',
@@ -213,12 +232,14 @@ export class DomainController {
         versionNo: 1,
         isActive: true,
       }),
-      this.promptTemplatesService.upsertActiveTemplate(domainId, {
-        promptType: 'system',
-        templateText: this.buildDefaultSystemPrompt(payload.organizationName),
-        versionNo: 1,
-        isActive: true,
-      }),
+      existingSystemPrompt
+        ? Promise.resolve(existingSystemPrompt)
+        : this.promptTemplatesService.upsertActiveTemplate(domainId, {
+            promptType: 'system',
+            templateText: this.buildDefaultSystemPrompt(payload.organizationName),
+            versionNo: 1,
+            isActive: true,
+          }),
     ]);
   }
 
@@ -314,6 +335,7 @@ export class DomainController {
       organizationName: payload.organizationName ?? payload.organization_name,
       industryType: payload.industryType ?? payload.industry,
       defaultLanguage: payload.defaultLanguage ?? payload.language,
+      supportedLanguages: normalizeLanguages(payload.supportedLanguages ?? payload.supported_languages),
       defaultVoice: payload.defaultVoice ?? payload.voice,
       welcomeMessage: payload.welcomeMessage ?? payload.welcome_message,
       fallbackMessage:
@@ -346,16 +368,12 @@ export class DomainController {
       organizationName: payload.organizationName ?? payload.organization_name,
       industryType: payload.industryType ?? payload.industry,
       defaultLanguage: payload.defaultLanguage ?? payload.language,
+      supportedLanguages: normalizeLanguages(payload.supportedLanguages ?? payload.supported_languages),
       defaultVoice: payload.defaultVoice ?? payload.voice,
       welcomeMessage: payload.welcomeMessage ?? payload.welcome_message,
-      fallbackMessage:
-        payload.fallbackMessage ??
-        payload.fallback_message ??
-        this.buildSeedConfig(
-          payload.displayName ?? payload.display_name ?? domainCode,
-          payload.organizationName ?? payload.organization_name ?? 'General Support',
-          payload.industryType ?? payload.industry ?? 'general',
-        ).fallbackMessage,
+      // A field left out of the request keeps its stored value. (This used to
+      // regenerate a generic fallback message on every partial update.)
+      fallbackMessage: payload.fallbackMessage ?? payload.fallback_message,
       escalationMessage: payload.escalationMessage ?? payload.escalation_message,
       isActive: payload.isActive ?? payload.active,
     });

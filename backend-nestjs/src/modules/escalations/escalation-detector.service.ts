@@ -23,6 +23,14 @@ const NO_TRIGGER: EscalationTrigger = {
   matchedRule: '',
 };
 
+/*
+ * Callers speak English, Tamil (in Tamil script or romanised "Tanglish"),
+ * Hindi and mixes of these. Note that `\b` only understands ASCII letters, so
+ * patterns for Tamil/Devanagari script must not rely on word boundaries.
+ * The model's escalate_to_human tool is the main multilingual path; these
+ * patterns are the cheap safety net that does not depend on the model.
+ */
+
 /** Caller explicitly asking for a person. */
 const HUMAN_REQUEST_PATTERNS = [
   /\b(speak|talk|connect|transfer|put me through)\b.{0,25}\b(human|person|agent|operator|representative|someone|somebody|staff)\b/i,
@@ -30,6 +38,13 @@ const HUMAN_REQUEST_PATTERNS = [
   /\b(customer\s+(care|service|support)|call\s+center)\b.{0,15}\b(agent|executive|person)?\b/i,
   /\boperator\b/i,
   /\bmanager\b/i,
+  // Tanglish: "agent kitta pesanum", "oru aal kooda pesanum"
+  /\b(agent|operator|staff|person|human|aal|aalu|manushan|manusan)\s*(kitta|kooda|kuda|kita)\s*(pesa|pesanum|pesu|peshanum|connect)/i,
+  // Tamil script: "ஏஜென்ட் கிட்ட பேசணும்", "ஆள் கிட்ட பேச"
+  /(ஏஜென்ட்|ஆள்|ஆளு|மனுஷ|மனித|ஆபரேட்டர்|ஸ்டாஃப்)[^.?!]{0,20}(பேச|கனெக்ட்)/,
+  // Hindi: "kisi insaan se baat", "एजेंट से बात"
+  /(इंसान|एजेंट|ऑपरेटर|किसी व्यक्ति)[^.?!]{0,15}बात/,
+  /\b(insaan|agent|operator)\s+se\s+baat\b/i,
 ];
 
 /** Caller is frustrated — escalate before they hang up. */
@@ -45,6 +60,27 @@ const FRUSTRATION_PATTERNS = [
 const URGENT_PATTERNS: { pattern: RegExp; reason: string; skillGroup: string }[] = [
   {
     pattern: /\b(chest pain|heart attack|stroke|not breathing|can'?t breathe|unconscious|bleeding heavily|suicid)\b/i,
+    reason: 'Medical emergency reported by caller',
+    skillGroup: 'emergency',
+  },
+  {
+    // Tamil script. Deliberately not bare "ரத்தம்" (blood): "ரத்த பரிசோதனை"
+    // is a routine blood-test enquiry, not an emergency.
+    pattern:
+      /(நெஞ்சு\s?வலி|நெஞ்சுவலி|மாரடைப்பு|ஹார்ட்\s?அட்டாக்|மூச்சு\s?(விட|திணற)|மூச்சுத்\s?திணறல்|மயக்கம்|பக்கவாதம்|தற்கொலை|ரத்தம்\s?(நிக்க|நிற்க|கொட்டு)|இரத்தம்\s?(நிக்க|நிற்க|கொட்டு))/,
+    reason: 'Medical emergency reported by caller',
+    skillGroup: 'emergency',
+  },
+  {
+    // Romanised Tamil and Hindi
+    pattern:
+      /\b(nenju\s?vali|nenjuvali|moochu\s?(vida|thinaral)|mayakkam|seene\s+(me|mein)\s+dard|saans\s+nahi)\b/i,
+    reason: 'Medical emergency reported by caller',
+    skillGroup: 'emergency',
+  },
+  {
+    // Hindi (Devanagari)
+    pattern: /(सीने में दर्द|दिल का दौरा|सांस नहीं|बेहोश)/,
     reason: 'Medical emergency reported by caller',
     skillGroup: 'emergency',
   },
@@ -140,8 +176,16 @@ export class EscalationDetectorService {
       }
     }
 
-    return /\b(i (can'?t|cannot|am not able to) help|outside .{0,20}scope|i (did not|didn'?t) (understand|catch)|sorry,? i)\b/i.test(
-      text,
-    );
+    if (
+      /\b(i (can'?t|cannot|am not able to) help|outside .{0,20}scope|i (did not|didn'?t) (understand|catch)|sorry,? i)\b/i.test(
+        text,
+      )
+    ) {
+      return true;
+    }
+
+    // The assistant now says the fallback in the caller's language, so the
+    // English fallback text above no longer matches a Tamil/Hindi reply.
+    return /(புரியவில்லை|புரியல|உதவ முடியாது|உதவ முடியல|samajh nahi|समझ नहीं|मदद नहीं कर)/i.test(text);
   }
 }

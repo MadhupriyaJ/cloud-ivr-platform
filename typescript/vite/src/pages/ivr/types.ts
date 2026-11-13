@@ -19,7 +19,10 @@ export type DomainConfig = {
   industry: string;
   organization_name: string;
   voice: string;
+  /** Language of the opening greeting. */
   language: string;
+  /** Comma-separated languages callers may use, e.g. "English, Tamil". Empty = any language. */
+  supported_languages?: string;
   welcome_message: string;
   fallback_message: string;
   intents: string[];

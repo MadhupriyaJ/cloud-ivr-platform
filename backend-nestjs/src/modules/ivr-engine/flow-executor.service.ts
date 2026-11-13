@@ -340,7 +340,7 @@ export class FlowExecutorService {
       }
 
       // Check if this is a mock endpoint (baseUrl contains 'mock')
-      const isMock = endpoint.baseUrl.includes('mock') || endpoint.path.includes('/mock/');
+      const isMock = (endpoint.baseUrl || '').includes('mock') || (endpoint.path || '').includes('/mock/');
       
       if (isMock) {
         lastResult = await this.apiIntegration.executeMockApiCall(action, endpoint, session.variables);

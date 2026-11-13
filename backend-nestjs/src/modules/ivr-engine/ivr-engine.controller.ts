@@ -579,15 +579,17 @@ export class IvrEngineController {
    * POST /api/ivr-engine/cache/invalidate
    */
   @Post('cache/invalidate')
-  async invalidateCache(@Body() body: { domainCode?: string }): Promise<any> {
-    this.flowLoader.invalidateCache(body.domainCode);
+  async invalidateCache(@Body() body?: { domainCode?: string }): Promise<any> {
+    // The body is optional: a bare POST (no JSON) clears everything.
+    const domainCode = body?.domainCode;
+    this.flowLoader.invalidateCache(domainCode);
     // Also invalidate the in-memory query cache
-    if (body.domainCode) {
-      this.cache.invalidate(`ivr:flows:${body.domainCode}`);
-      this.cache.invalidate(`ivr:endpoints:${body.domainCode}`);
+    if (domainCode) {
+      this.cache.invalidate(`ivr:flows:${domainCode}`);
+      this.cache.invalidate(`ivr:endpoints:${domainCode}`);
     }
     this.cache.invalidatePrefix('ivr:');
-    return { success: true, message: body.domainCode ? `Cache invalidated for ${body.domainCode}` : 'All caches invalidated' };
+    return { success: true, message: domainCode ? `Cache invalidated for ${domainCode}` : 'All caches invalidated' };
   }
 
   /**

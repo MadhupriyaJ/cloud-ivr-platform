@@ -6,13 +6,47 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { HospitalIvrRequestDto } from './dto/hospital-ivr-request.dto';
 import { BootstrapHospitalDto } from './dto/bootstrap-hospital.dto';
 import { CacheService } from '../../common/cache.service';
+import { DoctorImportService } from './doctor-import.service';
 
 @Controller('hospital')
 export class HospitalController {
   constructor(
     private readonly hospitalService: HospitalService,
     private readonly cache: CacheService,
+    private readonly doctorImport: DoctorImportService,
   ) {}
+
+  /**
+   * Step 1 of the doctor import: search the web for a hospital's doctors.
+   * Read-only — returns a list for an admin to review.
+   * POST /api/hospital/doctor-import/search { hospitalName, city?, website? }
+   */
+  @Post('doctor-import/search')
+  async searchDoctorsOnWeb(@Body() body: { hospitalName?: string; city?: string; website?: string }) {
+    return this.doctorImport.search({
+      hospitalName: String(body?.hospitalName || ''),
+      city: body?.city,
+      website: body?.website,
+    });
+  }
+
+  /**
+   * Step 2: write the reviewed doctors into the directory.
+   * POST /api/hospital/doctor-import/apply { doctors, deactivateMissing?, organizationName? }
+   */
+  @Post('doctor-import/apply')
+  async applyDoctorImport(
+    @Body() body: { doctors?: unknown; deactivateMissing?: boolean; organizationName?: string },
+  ) {
+    const result = await this.doctorImport.apply({
+      doctors: body?.doctors,
+      deactivateMissing: Boolean(body?.deactivateMissing),
+      organizationName: body?.organizationName,
+    });
+    this.cache.invalidatePrefix('hospital:');
+    this.cache.invalidatePrefix('domains:');
+    return result;
+  }
 
   @Post('bootstrap')
   async bootstrap(@Body() payload: BootstrapHospitalDto) {

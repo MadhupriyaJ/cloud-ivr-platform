@@ -250,10 +250,21 @@ export class HospitalService {
       }
     }
 
-    const existingAppointment = await this.findActiveAppointmentForPatient(patient.patientId);
-    if (existingAppointment) {
+    // A patient may hold appointments with several doctors (cardiology and
+    // orthopedics, say). What is refused is a second upcoming booking with the
+    // same doctor — that should be a reschedule — and two bookings at the same
+    // date and time.
+    const conflict = await this.findConflictingAppointment(
+      patient.patientId,
+      payload.doctorId,
+      payload.appointmentDate,
+      appointmentTime,
+    );
+    if (conflict) {
       throw new ConflictException(
-        `An active appointment already exists for this patient with ${existingAppointment.doctorName} on ${existingAppointment.appointmentDate} at ${existingAppointment.appointmentTime}.`,
+        conflict.sameDoctor
+          ? `This patient already has an upcoming appointment with ${conflict.doctorName} on ${toDateOnly(conflict.appointmentDate)} at ${toTimeText(conflict.appointmentTime).slice(0, 5)}; reschedule it instead.`
+          : `This patient already has another appointment at ${toTimeText(conflict.appointmentTime).slice(0, 5)} on ${toDateOnly(conflict.appointmentDate)}.`,
       );
     }
 
@@ -268,12 +279,10 @@ export class HospitalService {
       appointmentTime,
     );
 
-    if (!schedule || schedule.availableSlots <= 0) {
+    // Reserve atomically: two callers racing for the last slot must not both win.
+    if (!schedule || !(await this.reserveSlot(schedule.scheduleId))) {
       throw new NotFoundException('No available slot found for the requested doctor, date, and time.');
     }
-
-    schedule.availableSlots -= 1;
-    await this.scheduleRepository.save(schedule);
 
     const appointment = this.appointmentRepository.create({
       appointmentCode: this.buildCode('APT'),
@@ -288,8 +297,36 @@ export class HospitalService {
       conversationId: payload.conversationId ?? null,
     });
 
-    const saved = await this.appointmentRepository.save(appointment);
+    let saved;
+    try {
+      saved = await this.appointmentRepository.save(appointment);
+    } catch (error) {
+      // Give the slot back if the appointment itself could not be stored.
+      await this.releaseSlot(schedule.scheduleId);
+      throw error;
+    }
     return this.getAppointmentDetails(saved.appointmentId);
+  }
+
+  /** Take one slot if any is left. Returns false when the slot is full. */
+  private async reserveSlot(scheduleId: string): Promise<boolean> {
+    const result = await this.scheduleRepository
+      .createQueryBuilder()
+      .update()
+      .set({ availableSlots: () => 'AvailableSlots - 1' })
+      .where('ScheduleId = :scheduleId AND AvailableSlots > 0', { scheduleId })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
+  /** Return one slot, never beyond the schedule's capacity. */
+  private async releaseSlot(scheduleId: string): Promise<void> {
+    await this.scheduleRepository
+      .createQueryBuilder()
+      .update()
+      .set({ availableSlots: () => 'AvailableSlots + 1' })
+      .where('ScheduleId = :scheduleId AND AvailableSlots < MaxSlots', { scheduleId })
+      .execute();
   }
 
   async verifyAppointment(patientCode?: string, phoneNumber?: string): Promise<any | null> {
@@ -374,30 +411,32 @@ export class HospitalService {
     if (!appointment) {
       throw new NotFoundException(`Appointment '${appointmentId}' not found.`);
     }
+    if (appointment.appointmentStatus === 'cancelled') {
+      throw new ConflictException('A cancelled appointment cannot be rescheduled; book a new one.');
+    }
 
     const nextSchedule = await this.findScheduleByDoctorDateTime(
       appointment.doctorId,
       payload.appointmentDate,
       appointmentTime,
     );
-
-    if (!nextSchedule || nextSchedule.availableSlots <= 0) {
-      throw new NotFoundException('Requested reschedule slot is unavailable.');
-    }
-
     const previousSchedule = await this.findScheduleByDoctorDateTime(
       appointment.doctorId,
       appointment.appointmentDate,
       appointment.appointmentTime,
     );
 
-    if (previousSchedule) {
-      previousSchedule.availableSlots += 1;
-      await this.scheduleRepository.save(previousSchedule);
+    // Same slot: the patient already holds it, so there is nothing to move.
+    if (nextSchedule && previousSchedule && nextSchedule.scheduleId === previousSchedule.scheduleId) {
+      return this.getAppointmentDetails(appointmentId);
     }
 
-    nextSchedule.availableSlots -= 1;
-    await this.scheduleRepository.save(nextSchedule);
+    if (!nextSchedule || !(await this.reserveSlot(nextSchedule.scheduleId))) {
+      throw new NotFoundException('Requested reschedule slot is unavailable.');
+    }
+    if (previousSchedule) {
+      await this.releaseSlot(previousSchedule.scheduleId);
+    }
 
     appointment.appointmentDate = payload.appointmentDate;
     appointment.appointmentTime = appointmentTime;
@@ -412,6 +451,10 @@ export class HospitalService {
     if (!appointment) {
       throw new NotFoundException(`Appointment '${appointmentId}' not found.`);
     }
+    // Idempotent: cancelling twice must not release the slot twice.
+    if (appointment.appointmentStatus === 'cancelled') {
+      return this.getAppointmentDetails(appointmentId);
+    }
 
     const schedule = await this.findScheduleByDoctorDateTime(
       appointment.doctorId,
@@ -420,8 +463,7 @@ export class HospitalService {
     );
 
     if (schedule) {
-      schedule.availableSlots += 1;
-      await this.scheduleRepository.save(schedule);
+      await this.releaseSlot(schedule.scheduleId);
     }
 
     appointment.appointmentStatus = 'cancelled';
@@ -1157,11 +1199,10 @@ export class HospitalService {
     options?: Record<string, unknown>;
   }): Promise<string> {
     const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').trim().replace(/\/+$/, '');
-    const deployment = (
-      process.env.AZURE_OPENAI_ORCHESTRATION_DEPLOYMENT ||
-      process.env.AZURE_OPENAI_DEPLOYMENT ||
-      ''
-    ).trim();
+    // Chat-completions model only. AZURE_OPENAI_DEPLOYMENT is the realtime
+    // (speech-to-speech) model, which cannot serve chat completions, so it is
+    // deliberately not used as a fallback here.
+    const deployment = (process.env.AZURE_OPENAI_ORCHESTRATION_DEPLOYMENT || '').trim();
     const apiKey = (process.env.AZURE_OPENAI_API_KEY || '').trim();
     const apiVersion = (
       process.env.AZURE_OPENAI_ORCHESTRATION_API_VERSION ||
@@ -1468,6 +1509,29 @@ export class HospitalService {
       .join('. ');
 
     return `Current backend doctor directory is ${summary}.`;
+  }
+
+  private async findConflictingAppointment(
+    patientId: string,
+    doctorId: string,
+    date: string,
+    time: string,
+  ): Promise<(any & { sameDoctor: boolean }) | null> {
+    const upcoming = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.PatientId = :patientId', { patientId })
+      .andWhere('appointment.AppointmentStatus IN (:...statuses)', { statuses: ['booked', 'rescheduled'] })
+      .andWhere('appointment.AppointmentDate >= :today', { today: upcomingIstDates(1)[0] })
+      .getMany();
+
+    const sameDoctor = upcoming.find((item) => item.doctorId.toLowerCase() === doctorId.toLowerCase());
+    const sameTime = upcoming.find(
+      (item) =>
+        toDateOnly(item.appointmentDate) === date && toTimeText(item.appointmentTime).slice(0, 5) === time.slice(0, 5),
+    );
+    const hit = sameDoctor ?? sameTime;
+    if (!hit) return null;
+    return { ...(await this.getAppointmentDetails(hit.appointmentId)), sameDoctor: Boolean(sameDoctor) };
   }
 
   private async findActiveAppointmentForPatient(patientId: string): Promise<any | null> {
@@ -1817,54 +1881,70 @@ export class HospitalService {
     return created;
   }
 
+  /**
+   * Make sure every doctor has the standard OPD slots for the next week.
+   *
+   * One query reads the existing slots for all the doctors at once and the
+   * missing ones are inserted in bulk. (This used to run one SELECT per
+   * doctor × day × slot — over a thousand queries per call once a real
+   * hospital's doctor list was imported.)
+   */
   private async seedSchedules(doctors: DoctorEntity[]): Promise<DoctorScheduleEntity[]> {
-    const dates = this.nextThreeDates();
+    if (doctors.length === 0) return [];
+
+    const dates = upcomingIstDates(7);
     const times = [
       ['09:00:00', '10:00:00'],
       ['10:00:00', '11:00:00'],
       ['16:00:00', '17:00:00'],
     ] as const;
 
-    const created: DoctorScheduleEntity[] = [];
+    const doctorIds = doctors.map((doctor) => doctor.doctorId);
+    const loadExisting = () =>
+      this.scheduleRepository
+        .createQueryBuilder('schedule')
+        .where('schedule.DoctorId IN (:...doctorIds)', { doctorIds })
+        .andWhere('schedule.ScheduleDate BETWEEN :first AND :last', {
+          first: dates[0],
+          last: dates[dates.length - 1],
+        })
+        .getMany();
+
+    const keyOf = (doctorId: string, date: string, time: string) =>
+      `${doctorId.toLowerCase()}|${date}|${time.slice(0, 5)}`;
+    const existing = await loadExisting();
+    const have = new Set(
+      existing.map((schedule) =>
+        keyOf(schedule.doctorId, toDateOnly(schedule.scheduleDate), toTimeText(schedule.startTime)),
+      ),
+    );
+
+    const missing: Partial<DoctorScheduleEntity>[] = [];
     for (const doctor of doctors) {
       for (const date of dates) {
         for (const [startTime, endTime] of times) {
-          let schedule = await this.findScheduleByDoctorDateTime(doctor.doctorId, date, startTime);
-
-          if (!schedule) {
-            try {
-              await this.scheduleRepository.insert(
-                this.scheduleRepository.create({
-                  doctorId: doctor.doctorId,
-                  scheduleDate: date,
-                  startTime,
-                  endTime,
-                  maxSlots: 5,
-                  availableSlots: 5,
-                  status: 'open',
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                }),
-              );
-              schedule = await this.scheduleRepository.findOne({
-                where: {
-                  doctorId: doctor.doctorId,
-                  scheduleDate: date,
-                },
-              });
-            } catch {
-              schedule = await this.findScheduleByDoctorDateTime(doctor.doctorId, date, startTime);
-            }
-          }
-
-          if (schedule) {
-            created.push(schedule);
-          }
+          if (have.has(keyOf(doctor.doctorId, date, startTime))) continue;
+          missing.push({
+            doctorId: doctor.doctorId,
+            scheduleDate: date,
+            startTime,
+            endTime,
+            maxSlots: 5,
+            availableSlots: 5,
+            status: 'open',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
         }
       }
     }
 
-    return created;
+    // SQL Server allows 2100 parameters per statement; 9 columns per row.
+    for (let index = 0; index < missing.length; index += 200) {
+      await this.scheduleRepository.insert(missing.slice(index, index + 200) as DoctorScheduleEntity[]);
+    }
+
+    return missing.length ? loadExisting() : existing;
   }
 
   private async ensureSchedulesForActiveDoctors(departmentId?: string): Promise<void> {
@@ -1889,11 +1969,69 @@ export class HospitalService {
     await this.seedSchedules([doctor]);
   }
 
-  private nextThreeDates(): string[] {
-    return Array.from({ length: 7 }, (_, index) => {
-      const current = new Date();
-      current.setDate(current.getDate() + index);
-      return current.toISOString().slice(0, 10);
-    });
+  /* ───────────── Helpers used by the voice assistant's tools ───────────── */
+
+  /** Public view of one appointment (patient, doctor, department joined). */
+  async getAppointment(appointmentId: string): Promise<any> {
+    return this.getAppointmentDetails(appointmentId);
   }
+
+  /** A patient's appointment by its spoken reference (last 6 characters of the code). */
+  async findPatientAppointmentByReference(patientId: string, reference: string): Promise<AppointmentEntity | null> {
+    const ref = reference.replace(/[^a-z0-9]/gi, '').toUpperCase();
+    if (ref.length < 4) return null;
+    return this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.PatientId = :patientId', { patientId })
+      .andWhere('UPPER(REPLACE(appointment.AppointmentCode, \'-\', \'\')) LIKE :suffix', { suffix: `%${ref}` })
+      .orderBy('appointment.AppointmentDate', 'DESC')
+      .getOne();
+  }
+
+  /** Today and later, not cancelled, earliest first. */
+  async listUpcomingAppointmentsForPatient(patientId: string): Promise<any[]> {
+    const rows = await this.listAppointments({});
+    const today = upcomingIstDates(1)[0];
+    return rows
+      .filter(
+        (row) =>
+          String(row.patientId).toLowerCase() === patientId.toLowerCase() &&
+          row.appointmentStatus !== 'cancelled' &&
+          toDateOnly(row.appointmentDate) >= today,
+      )
+      .reverse();
+  }
+}
+
+/** India Standard Time calendar dates, today first (YYYY-MM-DD). */
+export function upcomingIstDates(count: number): string[] {
+  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return Array.from({ length: count }, (_, index) => {
+    const day = new Date(istNow);
+    day.setUTCDate(istNow.getUTCDate() + index);
+    return day.toISOString().slice(0, 10);
+  });
+}
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+/**
+ * Normalise a DATE column value (string or Date) to YYYY-MM-DD.
+ *
+ * Raw queries return DATE/TIME columns as JS Dates built from the stored
+ * value in *local* time (TypeORM runs the SQL Server driver with
+ * useUTC=false), so local getters give back exactly what is in the table.
+ * Reading them as UTC shifted every value by the server's offset — 5:30 h
+ * in India, turning "14 Nov 16:00" into "13 Nov 10:30".
+ */
+export function toDateOnly(value: unknown): string {
+  if (value instanceof Date) return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())}`;
+  return String(value ?? '').slice(0, 10);
+}
+
+/** Normalise a TIME column value to HH:MM:SS (see toDateOnly for Dates). */
+export function toTimeText(value: unknown): string {
+  if (value instanceof Date) return `${pad2(value.getHours())}:${pad2(value.getMinutes())}:${pad2(value.getSeconds())}`;
+  const text = String(value ?? '');
+  return /^\d{2}:\d{2}$/.test(text) ? `${text}:00` : text.slice(0, 8);
 }

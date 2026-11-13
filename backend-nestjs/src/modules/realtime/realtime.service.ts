@@ -5,6 +5,7 @@ import { DomainIntentsService } from '../domain-intents/domain-intents.service';
 import { DomainRulesService } from '../domain-rules/domain-rules.service';
 import { DomainService } from '../domains/domain.service';
 import { PromptTemplatesService } from '../prompt-templates/prompt-templates.service';
+import { buildGreetingInstruction, buildLanguageInstructions, parseLanguages } from './language-policy';
 
 type ActiveSession = {
   clientId: string;
@@ -20,6 +21,8 @@ type DomainRealtimeConfig = {
   rules: string[];
   compliance: string[];
   instructions: string;
+  greetingInstruction: string;
+  supportedLanguages: string[];
   welcomeMessage: string;
   fallbackMessage: string;
   escalationMessage: string;
@@ -48,6 +51,8 @@ export class RealtimeService {
     systemPrompt: string;
     fallbackMessage: string;
     escalationMessage: string;
+    defaultLanguage: string;
+    supportedLanguages: string[];
   }): string {
     const intentsLine = input.intents.length
       ? `Allowed business intents: ${input.intents.join(', ')}.`
@@ -65,11 +70,14 @@ export class RealtimeService {
       'Speak clearly, politely, and briefly.',
       'Keep most replies within one or two short sentences.',
       'Ask one question at a time.',
+      buildLanguageInstructions(input.defaultLanguage, input.supportedLanguages),
       intentsLine,
       rulesLine,
       complianceLine,
-      `If the caller asks anything outside the allowed business intents, do not answer the question. Instead say exactly this fallback message: ${input.fallbackMessage}`,
-      `If the caller asks for a human, is frustrated, repeats an unsupported request, or the request should not be handled by the IVR, say exactly this escalation message: ${input.escalationMessage}`,
+      // The configured messages are usually written in English; the caller
+      // must hear them in the language they are speaking.
+      `If the caller asks anything outside the allowed business intents, do not answer the question. Instead give this fallback message, in the caller's language: ${input.fallbackMessage}`,
+      `If the caller asks for a human, is frustrated, repeats an unsupported request, or the request should not be handled by the IVR, give this escalation message, in the caller's language: ${input.escalationMessage}`,
       'Do not provide general knowledge, medical advice, educational explanations, or unrelated answers unless that is explicitly part of the allowed business intents.',
       'When in doubt, treat the request as out of scope and use the fallback message.',
     ]
@@ -83,7 +91,10 @@ export class RealtimeService {
     welcomeMessage: string,
     fallbackMessage: string,
     escalationMessage: string,
+    defaultLanguage: string,
+    supportedLanguagesText: string | null,
   ): Promise<DomainRealtimeConfig> {
+    const supportedLanguages = parseLanguages(supportedLanguagesText);
     const [intents, rules, activePrompts] = await Promise.all([
       this.domainIntentsService.listByDomain(domainId),
       this.domainRulesService.listByDomain(domainId),
@@ -121,6 +132,8 @@ export class RealtimeService {
       fallbackMessage: resolvedFallbackMessage,
       escalationMessage: resolvedEscalationMessage,
       systemPrompt: resolvedSystemPrompt,
+      supportedLanguages,
+      greetingInstruction: buildGreetingInstruction(resolvedWelcomeMessage, defaultLanguage, supportedLanguages),
       instructions: this.buildInstructions({
         organizationName,
         intents: activeIntents,
@@ -129,6 +142,8 @@ export class RealtimeService {
         systemPrompt: resolvedSystemPrompt,
         fallbackMessage: resolvedFallbackMessage,
         escalationMessage: resolvedEscalationMessage,
+        defaultLanguage,
+        supportedLanguages,
       }),
     };
   }
@@ -159,6 +174,11 @@ export class RealtimeService {
     rules: string[];
     compliance: string[];
     instructions: string;
+    /** First spoken turn, already in the domain's greeting language(s). */
+    greetingInstruction: string;
+    supportedLanguages: string[];
+    domainCode: string;
+    industryType: string;
   }> {
     const domain = await this.domainService.getByCode(payload.domainCode);
     const config = await this.loadDomainRealtimeConfig(
@@ -167,6 +187,8 @@ export class RealtimeService {
       domain.welcomeMessage,
       domain.fallbackMessage,
       domain.escalationMessage,
+      domain.defaultLanguage,
+      domain.supportedLanguages,
     );
     const conversation = await this.conversationsService.create({
       domainId: domain.domainId,
@@ -196,30 +218,19 @@ export class RealtimeService {
       rules: config.rules,
       compliance: config.compliance,
       instructions: config.instructions,
+      greetingInstruction: config.greetingInstruction,
+      supportedLanguages: config.supportedLanguages,
+      domainCode: domain.domainCode,
+      industryType: domain.industryType,
     };
   }
 
   async handleAudioChunk(clientId: string, audioBase64: string): Promise<{ accepted: boolean }> {
-    const session = this.sessions.get(clientId);
-    if (!session) {
-      return { accepted: false };
-    }
-
-    await this.conversationsService.addMessage({
-      conversationId: session.conversationId,
-      speakerType: 'customer',
-      messageType: 'audio_chunk',
-      messageText: `[audio_chunk:${audioBase64.length}]`,
-      sequenceNo: session.nextSequenceNo++,
-    });
-
-    // Placeholder for Azure OpenAI Realtime integration:
-    // 1. load prompt + tools for session.domainCode
-    // 2. forward audioBase64
-    // 3. evaluate transcript against intent guard
-    // 4. execute tools only if allowed by domain config
+    // Audio itself is not stored: it used to write one ConversationMessages
+    // row per 100 ms chunk. Caller and assistant transcripts are recorded by
+    // recordCallerText / recordAssistantText instead.
     void audioBase64;
-    return { accepted: true };
+    return { accepted: this.sessions.has(clientId) };
   }
 
   /** Persist a caller utterance transcript against the live conversation. */

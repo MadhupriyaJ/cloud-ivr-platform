@@ -14,5 +14,4 @@ export const azureConfig = registerAs('azure', () => ({
     process.env.AZURE_SPEECH_API_KEY ??
     process.env.AZURE_SPEECH_API ??
     '',
-  communicationConnectionString: process.env.AZURE_COMMUNICATION_CONNECTION_STRING ?? '',
 }));

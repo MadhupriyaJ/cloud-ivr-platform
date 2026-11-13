@@ -26,6 +26,12 @@ export class CreateDomainDto {
   @MaxLength(40)
   defaultLanguage!: string;
 
+  /** Comma-separated, e.g. "English, Tamil". Empty = any language. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  supportedLanguages?: string | null;
+
   @IsString()
   @MinLength(2)
   @MaxLength(60)

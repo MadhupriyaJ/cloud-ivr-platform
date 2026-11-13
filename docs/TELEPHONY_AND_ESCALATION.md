@@ -3,8 +3,7 @@
 How a real phone call reaches the IVR, and how a caller gets handed to a human.
 
 Both features live in the NestJS backend (`backend-nestjs/`) and are driven from the
-Metronic frontend (`typescript/vite/`). The standalone `main.py` Twilio demo at the repo
-root is superseded by this: it has no database, no domain configuration and no escalation.
+Metronic frontend (`typescript/vite/`).
 
 ---
 

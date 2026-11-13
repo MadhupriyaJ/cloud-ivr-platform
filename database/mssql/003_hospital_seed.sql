@@ -1,5 +1,5 @@
-USE [ivr_platform];
-GO
+-- Runs against the database you connect to (MSSQL_DATABASE); no USE statement
+-- so it also works for databases not named ivr_platform.
 
 DECLARE @DomainId UNIQUEIDENTIFIER;
 
