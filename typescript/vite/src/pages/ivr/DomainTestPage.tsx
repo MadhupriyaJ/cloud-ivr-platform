@@ -838,7 +838,7 @@ const DomainTestPage = () => {
                   </>
                 ) : (
                   <div className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-600">
-                    Inga initial-aa available departments, doctors, and slots mattum dhaan use pannunga. Verification, billing, lab report, or cancellation request pannumbodhu dhaan patient-related details inga kaatum.
+                    Initially, display only the available departments, doctors, and appointment slots. Patient-related details should be shown only when performing actions such as verification, billing, lab report access, or cancellation requests.
                   </div>
                 )}
               </div>
